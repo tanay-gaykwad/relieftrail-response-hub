@@ -1,0 +1,26 @@
+# Local environment and credentials
+.env
+.env.*
+!.env.example
+
+# Node
+node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/tsconfig.tsbuildinfo
+npm-debug.log*
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# Local database / IDE
+*.dump
+*.backup
+tmp/
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
+
