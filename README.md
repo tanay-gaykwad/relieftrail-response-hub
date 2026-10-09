@@ -1,4 +1,4 @@
-# ReliefTrail Funding Workspace
+# ReliefTrail ResponseHub
 
 An end-to-end portfolio demo for a fictional nonprofit finance team. It brings response context, reported contributions and disbursements, spreadsheet imports, human review flags, and an activity history into one organization-scoped workspace.
 
