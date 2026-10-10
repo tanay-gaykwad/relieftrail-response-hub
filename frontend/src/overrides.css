@@ -1,4 +1,211 @@
-.title-actions{display:flex;gap:7px;align-items:center}.title-actions a{text-decoration:none}.status-filter{height:34px;border:1px solid var(--line);background:white;border-radius:6px;color:#647168;padding:0 9px;font-size:9px}.period-label{height:27px;display:flex;align-items:center;border:1px solid var(--line);border-radius:5px;padding:0 8px;color:#78847b;font-size:9px}
-.signin-screen{min-height:100vh;display:grid;grid-template-columns:minmax(360px,480px) 1fr;background:#f5f7f3}.signin-card{width:min(100%,430px);align-self:center;justify-self:center;padding:42px 32px;background:#fff;border:1px solid #e8ebe6;border-radius:14px;box-shadow:0 15px 45px #1532240c}.signin-brand{margin:0 0 42px}.signin-kicker{font-size:9px;font-weight:700;letter-spacing:1.4px;color:var(--green);margin-bottom:9px}.signin-card h1{font:800 28px Manrope,sans-serif;letter-spacing:-.7px;margin:0}.signin-intro{font-size:12px;line-height:1.7;color:#76847b;margin:9px 0 22px}.signin-card form{display:grid;gap:14px}.signin-card form label{display:grid;gap:7px;font-size:11px;font-weight:700;color:#536157}.signin-card input{height:41px;border:1px solid #dfe5df;border-radius:7px;padding:0 11px;color:#26372e}.signin-submit{width:100%;justify-content:center;margin-top:3px;height:40px}.signin-error{padding:10px;border-radius:7px;background:#fff0ed;color:#a53f30;font-size:11px}.demo-login{display:flex;align-items:center;gap:10px;margin-top:20px;padding:12px;border:1px solid #e4ede5;background:#f7faf7;border-radius:8px;color:#397656}.demo-login span{display:grid;gap:3px}.demo-login b{font-size:10px}.demo-login small{font-size:9px;color:#77847a}.signin-foot{font-size:9px;line-height:1.6;color:#909b93;margin:16px 0 0}.signin-aside{display:flex;flex-direction:column;justify-content:center;padding:8vw;background:radial-gradient(ellipse at 75% 30%,#1a785a,#0d4938 72%);color:#eff8f1}.signin-aside-mark{width:53px;height:53px;display:grid;place-items:center;border-radius:15px;background:#ffffff1c}.signin-aside p{margin:34px 0 10px;font-size:11px;letter-spacing:.4px;color:#b2d9c3}.signin-aside h2{max-width:460px;font:700 clamp(28px,4vw,50px)/1.12 Manrope,sans-serif;letter-spacing:-1.2px;margin:0}.signin-aside>span{font-size:11px;color:#c3ddcd;margin-top:19px}.auth-loading{min-height:100vh;display:grid;place-items:center;color:#647168;font-size:13px}.profile-button{width:100%;text-align:left;border:0;background:transparent;padding:0;color:inherit;cursor:pointer}.profile-button:hover{background:#f5f7f4;border-radius:7px}@media(max-width:760px){.signin-screen{display:block;padding:30px 15px}.signin-card{margin:6vh auto 0;padding:30px 22px}.signin-aside{display:none}}
-.edit-row-button{border:0;background:transparent;color:var(--green);font-size:10px;font-weight:700;padding:4px 6px;border-radius:5px}.edit-row-button:hover{background:#edf5ef}.button.danger{margin-right:auto;border:1px solid #f0d7d3;background:#fff7f5;color:#a34135}
-
+.title-actions {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+}
+.title-actions a {
+  text-decoration: none;
+}
+.status-filter {
+  height: 34px;
+  border: 1px solid var(--line);
+  background: white;
+  border-radius: 6px;
+  color: #647168;
+  padding: 0 9px;
+  font-size: 9px;
+}
+.period-label {
+  height: 27px;
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 0 8px;
+  color: #78847b;
+  font-size: 9px;
+}
+.signin-screen {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(360px, 480px) 1fr;
+  background: #f5f7f3;
+}
+.signin-card {
+  width: min(100%, 430px);
+  align-self: center;
+  justify-self: center;
+  padding: 42px 32px;
+  background: #fff;
+  border: 1px solid #e8ebe6;
+  border-radius: 14px;
+  box-shadow: 0 15px 45px #1532240c;
+}
+.signin-brand {
+  margin: 0 0 42px;
+}
+.signin-kicker {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.4px;
+  color: var(--green);
+  margin-bottom: 9px;
+}
+.signin-card h1 {
+  font:
+    800 28px Manrope,
+    sans-serif;
+  letter-spacing: -0.7px;
+  margin: 0;
+}
+.signin-intro {
+  font-size: 12px;
+  line-height: 1.7;
+  color: #76847b;
+  margin: 9px 0 22px;
+}
+.signin-card form {
+  display: grid;
+  gap: 14px;
+}
+.signin-card form label {
+  display: grid;
+  gap: 7px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #536157;
+}
+.signin-card input {
+  height: 41px;
+  border: 1px solid #dfe5df;
+  border-radius: 7px;
+  padding: 0 11px;
+  color: #26372e;
+}
+.signin-submit {
+  width: 100%;
+  justify-content: center;
+  margin-top: 3px;
+  height: 40px;
+}
+.signin-error {
+  padding: 10px;
+  border-radius: 7px;
+  background: #fff0ed;
+  color: #a53f30;
+  font-size: 11px;
+}
+.demo-login {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 20px;
+  padding: 12px;
+  border: 1px solid #e4ede5;
+  background: #f7faf7;
+  border-radius: 8px;
+  color: #397656;
+}
+.demo-login span {
+  display: grid;
+  gap: 3px;
+}
+.demo-login b {
+  font-size: 10px;
+}
+.demo-login small {
+  font-size: 9px;
+  color: #77847a;
+}
+.signin-foot {
+  font-size: 9px;
+  line-height: 1.6;
+  color: #909b93;
+  margin: 16px 0 0;
+}
+.signin-aside {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 8vw;
+  background: radial-gradient(ellipse at 75% 30%, #1a785a, #0d4938 72%);
+  color: #eff8f1;
+}
+.signin-aside-mark {
+  width: 53px;
+  height: 53px;
+  display: grid;
+  place-items: center;
+  border-radius: 15px;
+  background: #ffffff1c;
+}
+.signin-aside p {
+  margin: 34px 0 10px;
+  font-size: 11px;
+  letter-spacing: 0.4px;
+  color: #b2d9c3;
+}
+.signin-aside h2 {
+  max-width: 460px;
+  font:
+    700 clamp(28px, 4vw, 50px)/1.12 Manrope,
+    sans-serif;
+  letter-spacing: -1.2px;
+  margin: 0;
+}
+.signin-aside > span {
+  font-size: 11px;
+  color: #c3ddcd;
+  margin-top: 19px;
+}
+.auth-loading {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  color: #647168;
+  font-size: 13px;
+}
+.profile-button {
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  cursor: pointer;
+}
+.profile-button:hover {
+  background: #f5f7f4;
+  border-radius: 7px;
+}
+@media (max-width: 760px) {
+  .signin-screen {
+    display: block;
+    padding: 30px 15px;
+  }
+  .signin-card {
+    margin: 6vh auto 0;
+    padding: 30px 22px;
+  }
+  .signin-aside {
+    display: none;
+  }
+}
+.edit-row-button {
+  border: 0;
+  background: transparent;
+  color: var(--green);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 4px 6px;
+  border-radius: 5px;
+}
+.edit-row-button:hover {
+  background: #edf5ef;
+}
+.button.danger {
+  margin-right: auto;
+  border: 1px solid #f0d7d3;
+  background: #fff7f5;
+  color: #a34135;
+}

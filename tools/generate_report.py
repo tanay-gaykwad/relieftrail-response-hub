@@ -90,7 +90,7 @@ class InterfacePreview(Flowable):
         c.setFont("Helvetica", 6.2)
         c.setFillColor(MUTED)
         c.drawString(37, 192, "FUNDING WORKSPACE")
-        for i, label in enumerate(["Overview", "Responses", "Funding records", "Review queue", "Activity log"]):
+        for i, label in enumerate(["Overview", "Responses", "Awards & budgets", "Reports", "Funding records"]):
             y = 170 - i * 19
             if i == 0:
                 c.setFillColor(PALE)
@@ -141,12 +141,12 @@ class InterfacePreview(Flowable):
         c.drawString(359, 79, "Amount mismatch")
         c.setFillColor(MUTED)
         c.setFont("Helvetica-Oblique", 6.2)
-        c.drawString(8, -10, "Illustrative interface preview based on the frontend; live database-connected capture is pending local Docker availability.")
+        c.drawString(8, -10, "Illustrative interface preview based on the frontend; not a live deployment or verified database screenshot.")
 
 
 class Report(BaseDocTemplate):
     def __init__(self, path):
-        super().__init__(str(path), pagesize=A4, rightMargin=17*mm, leftMargin=17*mm, topMargin=18*mm, bottomMargin=17*mm, title="ReliefTrail Funding Workspace - Project Report", author="ReliefTrail portfolio project")
+        super().__init__(str(path), pagesize=A4, rightMargin=17*mm, leftMargin=17*mm, topMargin=18*mm, bottomMargin=17*mm, title="ReliefTrail ResponseHub - Project Report", author="ReliefTrail portfolio project")
         frame = Frame(self.leftMargin, self.bottomMargin, self.width, self.height, id="normal")
         self.addPageTemplates(PageTemplate(id="main", frames=frame, onPage=self.decorate))
 
@@ -157,7 +157,7 @@ class Report(BaseDocTemplate):
         canvas.line(17*mm, 13*mm, w-17*mm, 13*mm)
         canvas.setFont("Helvetica", 8)
         canvas.setFillColor(MUTED)
-        canvas.drawString(17*mm, 8*mm, "ReliefTrail Funding Workspace | Fictional portfolio demo")
+        canvas.drawString(17*mm, 8*mm, "ReliefTrail ResponseHub | Fictional portfolio demo")
         canvas.drawRightString(w-17*mm, 8*mm, f"{doc.page}")
         canvas.restoreState()
 
@@ -182,18 +182,18 @@ def bullet(text):
 story = [
     Spacer(1, 15*mm),
     para("DATABASE MANAGEMENT SYSTEMS | MINI PROJECT", "Kicker"),
-    para("ReliefTrail Funding Workspace", "CoverTitle"),
-    para("An organization-scoped web application for organizing reported relief-response funding, reviewing mismatches, and keeping a traceable action history.", "Body2"),
+    para("ReliefTrail ResponseHub", "CoverTitle"),
+    para("An organization-scoped response and grant workspace linking approved work, restricted awards, budget lines, reported spending, donor deadlines, and human review.", "Body2"),
     Spacer(1, 7*mm),
     InterfacePreview(),
     Spacer(1, 8*mm),
     para("Project stage", "Sub"),
-    para("Working portfolio demo: React + TypeScript frontend, FastAPI backend, and PostgreSQL schema with fictional sample records. Local Docker was unavailable during report preparation, so this document uses an illustrative interface preview rather than a live database screenshot.", "Body2"),
+    para("Portfolio demo: React + TypeScript frontend, FastAPI backend, and PostgreSQL schema with fictional sample records. This report uses an illustrative interface preview rather than a screenshot from a live database-backed deployment.", "Body2"),
     para("Safety note", "Sub"),
     para("All data and demo credentials are fictional. The app does not accept donations, move money, or verify aid delivery. This project is not approved for real organizational data or production use.", "Body2"),
     PageBreak(),
     para("1. Introduction", "Section"),
-    para("ReliefTrail Funding Workspace is a database-backed portfolio application for a fictional nonprofit team. It brings relief response context and reported contribution/disbursement records into the same workspace. Staff can import a partner CSV, inspect human review flags, and view an action history.", "Body2"),
+    para("ReliefTrail ResponseHub is a database-backed portfolio application for a fictional nonprofit team. It links response records to awards and restricted allocations, lets staff record reported spending, tracks reporting milestones, and supports human review and audit history.", "Body2"),
     para("2. Problem statement", "Section"),
     para("Funding details may arrive in separate spreadsheets and records. This makes it harder to see which response a line belongs to, spot missing references, and explain what a reviewer changed. The project demonstrates a small internal workflow that links the records and preserves the source context. It is a learning scenario, not a verified statement about a particular organization's operational pain.", "Body2"),
     para("3. Objectives", "Section"),
@@ -201,6 +201,7 @@ story = [
     bullet("Build a friendly interface for response create/read/update/delete, CSV import/export, review flags, and activity history."),
     bullet("Use SQL joins, aggregates, a reporting view, transaction-backed writes, and a trigger."),
     bullet("Demonstrate authentication and role-aware organization access checks in a controlled fictional demo."),
+    bullet("Test session/CSRF behavior, role denial, CSV validation/import handling, and PostgreSQL integrity rules."),
     para("4. Technologies", "Section"),
     Table([[para("Layer", "Small2"), para("Technology", "Small2"), para("Purpose", "Small2")],
            [para("Frontend", "Small2"), para("React, TypeScript, Vite", "Small2"), para("Responsive workspace interface", "Small2")],
@@ -217,6 +218,9 @@ story = [
            [para("organizations", "Small2"), para("id PK; organization name and type", "Small2")],
            [para("users / organization_memberships", "Small2"), para("user_id + organization_id composite PK; role-based membership", "Small2")],
            [para("responses", "Small2"), para("id PK; organization_id FK; unique response code; status, dates, summary", "Small2")],
+           [para("funders / funding_awards", "Small2"), para("Organization-scoped donor identity, award ceiling, dates, restrictions", "Small2")],
+           [para("award_allocations / reporting_milestones", "Small2"), para("Response budget line and due/submitted/accepted/returned report state", "Small2")],
+           [para("user_sessions / login_throttles", "Small2"), para("One-way session verifier/revocation; keyed failed-login throttle state", "Small2")],
            [para("funding_sources / import_batches", "Small2"), para("Source identity and organization-scoped CSV import summaries", "Small2")],
            [para("funding_records", "Small2"), para("response_id/source_id/import_batch_id FKs; type, amount, currency, date, references", "Small2")],
            [para("reconciliation_issues", "Small2"), para("Response FK and optional funding-record FK; issue state", "Small2")],
@@ -232,27 +236,28 @@ story = [
     bullet("Foreign keys, uniqueness rules, and CHECK constraints protect allowed statuses, roles, currency, positive amounts, and response codes."),
     bullet("CSV validation completes before database writes; accepted rows and the import batch/audit row commit in one transaction. Duplicate source references are skipped."),
     bullet("An append-only PostgreSQL trigger rejects UPDATE and DELETE on audit_events."),
-    bullet("A signed, expiring bearer token identifies a user. The API scopes reads to organization memberships and checks roles for response changes, CSV imports, and issue resolution."),
+    bullet("Argon2id password hashes, opaque revocable HttpOnly cookie sessions, CSRF checks, login throttling, and exact CORS origins protect the demo sign-in boundary."),
+    bullet("The API reloads active-account and organization membership state and checks roles server-side. Review responses, awards, team roles, reports, and flags by organization scope."),
+    bullet("Award creation groups award, allocation, reporting milestone, and audit event in one transaction. PostgreSQL triggers enforce award and disbursement ceilings."),
     bullet("Only unused draft responses can be deleted; a funding or review history blocks deletion. The database trigger rejects changes to audit events."),
     para("Example relationship query", "Sub"),
     Table([[para("SELECT r.code, o.name AS organization, f.record_type, f.amount, s.name AS source<br/>FROM funding_records f<br/>JOIN responses r ON r.id = f.response_id<br/>JOIN organizations o ON o.id = r.organization_id<br/>JOIN funding_sources s ON s.id = f.source_id;", "Small2")]], colWidths=[175*mm], style=TableStyle([("BACKGROUND",(0,0),(-1,-1),colors.HexColor("#f5f7f4")),("BOX",(0,0),(-1,-1),.5,LINE),("LEFTPADDING",(0,0),(-1,-1),8),("TOPPADDING",(0,0),(-1,-1),8),("BOTTOMPADDING",(0,0),(-1,-1),8)])),
     para("7. Interface preview", "Section"),
-    para("The preview summarizes the dashboard layout: a left workspace menu, response and funding summary cards, a chart, and a review panel. The app also includes dedicated response, funding, review queue, and activity screens. This is an illustrative rendering based on the implemented frontend. The database-backed UI has not yet been captured running in a local browser because Docker is not installed on the build host.", "Body2"),
+    para("The preview summarizes the dashboard style and is illustrative. The frontend also includes dedicated response, awards/budgets, reporting calendar, funding, review queue, team access, and activity screens. It is not proof of a deployed service.", "Body2"),
     InterfacePreview(),
     PageBreak(),
     para("8. Conclusion", "Section"),
-    para("This mini project demonstrates an end-to-end database application: a typed frontend calls an API, the API validates requests and enforces organization membership, and PostgreSQL stores related records with constraints, a view, a trigger, and transactional workflows. It provides a practical base for learning schema design, SQL, joins, data validation, authorization, and audit concepts.", "Body2"),
+    para("This project demonstrates an end-to-end database application: a typed frontend calls an API, the API validates requests and enforces tenant roles, and PostgreSQL protects linked grant records with constraints, a reporting view, triggers, and transactional writes. It is production-minded portfolio work, not certified or suitable for real operations.", "Body2"),
     para("9. Future scope", "Section"),
-    bullet("Add invitation, role-administration, password reset, MFA, and login throttling; adopt established auth libraries and production secrets."),
-    bullet("Add automated schema migrations, authorization-focused verification, deployment monitoring, tested backups, and an independent security review."),
+    bullet("Add invited-account onboarding, recovery, MFA, independent authorization review, and production operations controls."),
+    bullet("Add schema migration tooling, monitoring, tested backups, an incident process, and independent security review."),
     bullet("Improve reconciliation rules, spreadsheet column mapping, and correction workflow."),
     bullet("Explore human-reviewed AI suggestions for mapping columns or drafting reports with source-row citations."),
-    bullet("Connect the earlier contract prototype as a read-only event source after its provenance and integrity are verified."),
+    bullet("Explore connecting the separate contract prototype as a read-only event source after validating provenance and integrity; the projects are not currently integrated."),
     bullet("Interview NGO grants and finance staff before making adoption or commercial claims."),
     para("Repository and setup", "Sub"),
-    para("Source code, SQL schema, seed data, query examples, and local instructions are in the ReliefTrail Funding Workspace GitHub repository. The initial setup uses Docker Compose; API docs are available at /docs when running locally.", "Body2"),
+    para("The repository includes source code, SQL schema and sample data, query examples, security and architecture docs, setup instructions, a CI workflow, and backend tests. Local API docs are available at /docs in demo mode. Local checks currently pass 14 tests; three PostgreSQL integration checks require a disposable database and are skipped when it is unavailable.", "Body2"),
 ]
 
 Report(OUTPUT).build(story)
 print(OUTPUT)
-

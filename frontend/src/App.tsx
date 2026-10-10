@@ -1,73 +1,2523 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react'
-import { Activity, ArrowDownLeft, ArrowUpRight, Bell, BookOpenCheck, ChevronDown, CircleHelp, Download, FileClock, FileSpreadsheet, HandCoins, LayoutDashboard, Menu, Plus, Search, ShieldCheck, TriangleAlert, X, Check, MapPin, RefreshCw, Upload } from 'lucide-react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+  type ReactNode,
+} from "react";
+import {
+  Activity,
+  ArrowDownLeft,
+  ArrowUpRight,
+  Bell,
+  BookOpenCheck,
+  CalendarDays,
+  ChevronDown,
+  CircleHelp,
+  Download,
+  FileClock,
+  FileSpreadsheet,
+  HandCoins,
+  LayoutDashboard,
+  Menu,
+  Plus,
+  Search,
+  ShieldCheck,
+  TriangleAlert,
+  X,
+  Check,
+  MapPin,
+  RefreshCw,
+  Upload,
+  Landmark,
+  UsersRound,
+} from "lucide-react";
 
-const API = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
-type Page = 'Overview'|'Responses'|'Funding records'|'Review queue'|'Activity log'
-type ResponseRow = { id:number; code:string; title:string; location:string; summary:string; status:string; start_date:string|null; organization_name:string; contributed:string; disbursed:string; open_issues:number }
-type FundingRow = { id:number; record_type:string; amount:string; currency:string; recorded_on:string; reference:string; source_reference:string|null; description:string|null; response_code:string; response_title:string; source_name:string; open_issues:number }
-type Issue = { id:number; issue_type:string; description:string; status:string; created_at:string; response_code:string; reference:string|null; amount:string|null; currency:string|null }
-type Dashboard = { summary:{active_responses:number;response_count:number;contributed:string;disbursed:string;open_issues:number}; monthly:{month:string;contributions:string;disbursements:string}[]; recent_records:FundingRow[] }
-type Organization = {id:number;name:string;kind:string;role?:string}
+const API =
+  import.meta.env.VITE_API_URL ??
+  `${window.location.protocol}//${window.location.hostname}:8000`;
+type Page =
+  | "Overview"
+  | "Responses"
+  | "Funding records"
+  | "Awards & budgets"
+  | "Reporting calendar"
+  | "Team access"
+  | "Review queue"
+  | "Activity log";
+type ResponseRow = {
+  id: number;
+  code: string;
+  title: string;
+  location: string;
+  summary: string;
+  status: string;
+  start_date: string | null;
+  organization_name: string;
+  contributed: string;
+  disbursed: string;
+  open_issues: number;
+};
+type FundingRow = {
+  id: number;
+  record_type: string;
+  amount: string;
+  currency: string;
+  recorded_on: string;
+  reference: string;
+  source_reference: string | null;
+  description: string | null;
+  response_code: string;
+  response_title: string;
+  source_name: string;
+  open_issues: number;
+};
+type Issue = {
+  id: number;
+  issue_type: string;
+  description: string;
+  status: string;
+  created_at: string;
+  response_code: string;
+  reference: string | null;
+  amount: string | null;
+  currency: string | null;
+};
+type Dashboard = {
+  summary: {
+    active_responses: number;
+    response_count: number;
+    contributed: string;
+    disbursed: string;
+    open_issues: number;
+  };
+  monthly: { month: string; contributions: string; disbursements: string }[];
+  recent_records: FundingRow[];
+};
+type Organization = { id: number; name: string; kind: string; role?: string };
+type Award = {
+  id: number;
+  organization_id: number;
+  award_code: string;
+  title: string;
+  funder_name: string;
+  total_amount: string;
+  currency: string;
+  start_date: string;
+  end_date: string;
+  restricted_purpose: string;
+  status: string;
+  allocated_amount: string;
+  disbursed_amount: string;
+  reports_due: number;
+  allocations: {
+    id: number;
+    category: string;
+    budget_amount: string;
+    response_id: number;
+    response_code: string;
+    response_title: string;
+  }[];
+};
+type Milestone = {
+  id: number;
+  award_id: number;
+  period_start: string;
+  period_end: string;
+  due_date: string;
+  report_type: string;
+  status: string;
+  summary: string | null;
+  award_code: string;
+  award_title: string;
+  funder_name: string;
+  disbursed_amount: string;
+};
+type TeamMember = {
+  id: number;
+  full_name: string;
+  email: string;
+  is_active: boolean;
+  role: string;
+  joined_at: string;
+};
 
-async function get<T>(path:string):Promise<T>{const token=sessionStorage.getItem('relieftrail_access');const response=await fetch(`${API}${path}`,{headers:token?{Authorization:`Bearer ${token}`}:{}});if(!response.ok){const data=await response.json().catch(()=>({}));throw new Error(data.detail||`Request failed (${response.status})`)}return response.json()}
-async function send<T>(path:string,method:string,body?:unknown):Promise<T>{const token=sessionStorage.getItem('relieftrail_access');const response=await fetch(`${API}${path}`,{method,headers:{'Content-Type':'application/json',...(token?{Authorization:`Bearer ${token}`}:{})},body:body?JSON.stringify(body):undefined});if(!response.ok){const data=await response.json().catch(()=>({}));throw new Error(data.detail||`Request failed (${response.status})`)}if(response.status===204)return undefined as T;return response.json()}
-const money=(n:string|number|undefined)=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:0}).format(Number(n||0))
-const axisMoney=(n:number)=>n>=1000?`$${Math.round(n/1000)}k`:`$${Math.round(n)}`
-const shortDate=(value:string|null|undefined)=>value?new Date(`${value.slice(0,10)}T12:00:00`).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'—'
-const initial=(name:string)=>name.split(' ').map(s=>s[0]).join('').slice(0,2).toUpperCase()
-const today=new Intl.DateTimeFormat('en-US',{weekday:'long',month:'long',day:'numeric'}).format(new Date())
+function csrfToken() {
+  const item = document.cookie
+    .split("; ")
+    .find((value) => value.startsWith("rt_csrf="));
+  return item ? decodeURIComponent(item.slice("rt_csrf=".length)) : "";
+}
+async function get<T>(path: string): Promise<T> {
+  const response = await fetch(`${API}${path}`, { credentials: "include" });
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.detail || `Request failed (${response.status})`);
+  }
+  return response.json();
+}
+async function send<T>(
+  path: string,
+  method: string,
+  body?: unknown,
+): Promise<T> {
+  const response = await fetch(`${API}${path}`, {
+    method,
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      "X-CSRF-Token": csrfToken(),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.detail || `Request failed (${response.status})`);
+  }
+  if (response.status === 204) return undefined as T;
+  return response.json();
+}
+const money = (n: string | number | undefined) =>
+  new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(Number(n || 0));
+const axisMoney = (n: number) =>
+  n >= 1000 ? `$${Math.round(n / 1000)}k` : `$${Math.round(n)}`;
+const shortDate = (value: string | null | undefined) =>
+  value
+    ? new Date(`${value.slice(0, 10)}T12:00:00`).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      })
+    : "—";
+const initial = (name: string) =>
+  name
+    .split(" ")
+    .map((s) => s[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+const today = new Intl.DateTimeFormat("en-US", {
+  weekday: "long",
+  month: "long",
+  day: "numeric",
+}).format(new Date());
 
-export default function App(){
- const [session,setSession]=useState(()=>sessionStorage.getItem('relieftrail_access'));const [profile,setProfile]=useState<{full_name:string;email:string;organizations:{id:number;name:string;role:string}[]}|null>(null)
- const [page,setPage]=useState<Page>('Overview');const [menuOpen,setMenuOpen]=useState(false);const [loading,setLoading]=useState(true);const [error,setError]=useState('');const [dashboard,setDashboard]=useState<Dashboard|null>(null);const [responses,setResponses]=useState<ResponseRow[]>([]);const [funding,setFunding]=useState<FundingRow[]>([]);const [issues,setIssues]=useState<Issue[]>([]);const [orgs,setOrgs]=useState<Organization[]>([]);const [query,setQuery]=useState('');const [statusFilter,setStatusFilter]=useState('all');const [modal,setModal]=useState(false);const [editing,setEditing]=useState<ResponseRow|null>(null);const [saving,setSaving]=useState(false);const [notice,setNotice]=useState('');const importRef=useRef<HTMLInputElement>(null)
- const refresh=useCallback(async()=>{setLoading(true);setError('');try{const [d,r,f,i,o]=await Promise.all([get<Dashboard>('/api/dashboard'),get<ResponseRow[]>('/api/responses'),get<FundingRow[]>('/api/funding-records'),get<Issue[]>('/api/issues'),get<Organization[]>('/api/organizations')]);setDashboard(d);setResponses(r);setFunding(f);setIssues(i);setOrgs(o)}catch(e){if(e instanceof Error&&e.message.includes('Sign in')){sessionStorage.removeItem('relieftrail_access');setSession(null)}setError(e instanceof Error?e.message:'Could not reach the API')}finally{setLoading(false)}},[])
- useEffect(()=>{if(!session){sessionStorage.removeItem('relieftrail_access');setProfile(null);setLoading(false);return}sessionStorage.setItem('relieftrail_access',session);void get<typeof profile>('/api/auth/me').then(data=>{setProfile(data);return refresh()}).catch(err=>{sessionStorage.removeItem('relieftrail_access');setSession(null);setError(err instanceof Error?err.message:'Please sign in again')})},[session,refresh]);useEffect(()=>{if(!notice)return;const timer=setTimeout(()=>setNotice(''),4200);return()=>clearTimeout(timer)},[notice])
- const filteredFunding=useMemo(()=>funding.filter(x=>`${x.response_title} ${x.reference} ${x.source_name} ${x.record_type}`.toLowerCase().includes(query.toLowerCase())),[funding,query])
- const filteredResponses=useMemo(()=>responses.filter(x=>`${x.title} ${x.code} ${x.location} ${x.organization_name}`.toLowerCase().includes(query.toLowerCase())&&(statusFilter==='all'||x.status===statusFilter)),[responses,query,statusFilter])
- async function createResponse(e:FormEvent<HTMLFormElement>){e.preventDefault();setSaving(true);const form=new FormData(e.currentTarget);try{if(editing){await send(`/api/responses/${editing.id}`,'PATCH',{title:form.get('title'),location:form.get('location'),summary:form.get('summary'),status:form.get('status'),start_date:form.get('start_date')||null});setNotice('Response changes saved.')}else{await send('/api/responses','POST',{organization_id:Number(form.get('organization_id')),code:form.get('code'),title:form.get('title'),location:form.get('location'),summary:form.get('summary'),start_date:form.get('start_date')||null});setNotice('Response saved as a draft.')}setModal(false);setEditing(null);await refresh()}catch(err){setNotice(err instanceof Error?err.message:'Could not save response')}finally{setSaving(false)}}
- async function deleteResponse(){if(!editing||!window.confirm(`Delete the empty draft “${editing.title}”?`))return;try{await send(`/api/responses/${editing.id}`,'DELETE');setModal(false);setEditing(null);setNotice('Draft deleted.');await refresh()}catch(err){setNotice(err instanceof Error?err.message:'Could not delete this draft')}}
- async function resolve(id:number){try{await send(`/api/issues/${id}/resolve`,'PATCH');setNotice('Review item marked as resolved.');await refresh()}catch(err){setNotice(err instanceof Error?err.message:'Could not update review item')}}
- async function uploadCsv(e:ChangeEvent<HTMLInputElement>){const input=e.currentTarget;const file=input.files?.[0];if(!file)return;const body=new FormData();body.append('file',file);try{const token=sessionStorage.getItem('relieftrail_access');const response=await fetch(`${API}/api/imports/csv`,{method:'POST',headers:token?{Authorization:`Bearer ${token}`}:{},body});const data=await response.json();if(!response.ok)throw new Error(data.detail||'Could not import this file.');setNotice(`Import complete: ${data.rows_imported} added, ${data.rows_skipped} duplicate rows skipped.`);await refresh()}catch(err){setNotice(err instanceof Error?err.message:'Could not import CSV')}finally{input.value=''}}
- function exportCsv(){const data=[['response_code','record_type','amount','currency','recorded_on','reference','source_reference','description'],...funding.map(x=>[x.response_code,x.record_type,x.amount,x.currency,x.recorded_on,x.reference,x.source_reference,x.description])];const csv=data.map(row=>row.map(value=>{const text=String(value??'');const safe=/^[=+@\-\t\r]/.test(text)?`'${text}`:text;return `"${safe.replace(/"/g,'""')}"`}).join(',')).join('\r\n');const url=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));const a=document.createElement('a');a.href=url;a.download='relieftrail-funding-records-demo.csv';a.click();URL.revokeObjectURL(url);setNotice('Demo records exported as an import-ready CSV.')}
- const canEdit=profile?.organizations.some(o=>o.role==='org_admin'||o.role==='editor')??false;const canReview=profile?.organizations.some(o=>['org_admin','editor','reviewer'].includes(o.role))??false
- const nav: {label:Page;icon:typeof LayoutDashboard;count?:number}[]=[{label:'Overview',icon:LayoutDashboard},{label:'Responses',icon:BookOpenCheck},{label:'Funding records',icon:HandCoins},{label:'Review queue',icon:TriangleAlert,count:issues.filter(x=>x.status==='open').length},{label:'Activity log',icon:FileClock}]
- if(!session)return <SignIn onLogin={token=>{sessionStorage.setItem('relieftrail_access',token);setSession(token)}}/>;
- if(!profile)return <div className="auth-loading">Checking organization access…</div>;
- return <div className="app-shell"><aside className={`sidebar ${menuOpen?'sidebar-open':''}`}><a className="brand" href="#overview" onClick={()=>setPage('Overview')}><span className="brand-mark"><Activity size={19}/></span><span className="brand-word">relieftrail<span>FUNDING WORKSPACE</span></span></a><div className="workspace-switch"><span className="org-avatar">{initial(profile.organizations[0]?.name||'Demo')}</span><span className="org-copy"><b>{profile.organizations[0]?.name||'Demo workspace'}</b><small>{profile.organizations[0]?.role.replace('_',' ').toUpperCase()||'MEMBER'}</small></span><ChevronDown size={15}/></div><div className="nav-caption">WORKSPACE</div><nav>{nav.map(item=><button key={item.label} className={`nav-item ${page===item.label?'selected':''}`} onClick={()=>{setPage(item.label);setMenuOpen(false)}}><item.icon size={17}/><span>{item.label}</span>{item.count? <span className="nav-count">{item.count}</span>:null}</button>)}</nav><div className="sidebar-bottom"><div className="secure-note"><ShieldCheck size={17}/><span><b>Demo workspace</b><small>Sample data only · access scoped</small></span></div><button className="profile profile-button" onClick={()=>{sessionStorage.removeItem('relieftrail_access');setSession(null)}}><span className="profile-avatar">{initial(profile.full_name)}</span><span><b>{profile.full_name}</b><small>Sign out</small></span><ChevronDown size={14}/></button></div></aside>
- <main className="main"><header className="topbar"><button className="mobile-menu icon-button" aria-label="Open navigation" onClick={()=>setMenuOpen(!menuOpen)}><Menu size={19}/></button><div className="crumb">Workspace <span>/</span> <b>{page}</b></div><div className="top-actions"><button className="icon-button" aria-label="Help"><CircleHelp size={17}/></button><button className="icon-button notification" aria-label="Notifications"><Bell size={17}/><i/></button><span className="top-divider"/><span className="top-date">{today}</span><span className="top-avatar">{initial(profile.full_name)}</span></div></header>
- <div className="page-content">{error&&<div className="error-banner"><TriangleAlert size={17}/><span><b>Can’t connect to the demo database.</b> Start the API and database with the steps in the README. {error}</span><button onClick={()=>void refresh()}><RefreshCw size={14}/> Try again</button></div>}{notice&&<div className="toast"><Check size={16}/>{notice}<button aria-label="Dismiss" onClick={()=>setNotice('')}><X size={15}/></button></div>}
- {page==='Overview'&&<Overview dashboard={dashboard} issues={issues} loading={loading} canResolve={canReview} onNavigate={setPage} onExport={exportCsv} onResolve={resolve}/>}
- {page==='Responses'&&<Responses rows={filteredResponses} loading={loading} query={query} setQuery={setQuery} statusFilter={statusFilter} setStatusFilter={setStatusFilter} canEdit={canEdit} onAdd={()=>{setEditing(null);setModal(true)}} onEdit={row=>{setEditing(row);setModal(true)}}/>}
- {page==='Funding records'&&<Funding rows={filteredFunding} loading={loading} query={query} setQuery={setQuery} canEdit={canEdit} onExport={exportCsv} onImport={()=>importRef.current?.click()}/>}
- {page==='Review queue'&&<ReviewQueue issues={issues} loading={loading} canResolve={canReview} onResolve={resolve}/>}
- {page==='Activity log'&&<Audit/>}
- <footer className="page-footer"><span>ReliefTrail Funding Workspace <span className="footer-dot">·</span> Fictional portfolio demo</span><span>Records show what was reported; they do not prove aid delivery.</span></footer>
- </div></main><input ref={importRef} type="file" accept=".csv,text/csv" hidden onChange={uploadCsv}/>{modal&&<div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setModal(false)}}><section className="modal"><div className="modal-head"><div><div className="eyebrow">{editing?'EDIT RESPONSE':'NEW RESPONSE'}</div><h2>{editing?'Edit response':'Create a response'}</h2><p>{editing?'Update the response details and save your changes.':'Start with the basics. New responses are saved as drafts.'}</p></div><button className="icon-button" aria-label="Close" onClick={()=>setModal(false)}><X size={18}/></button></div><form onSubmit={createResponse}><label>Response name<input name="title" defaultValue={editing?.title||''} placeholder="e.g. River district flood response" required minLength={3} maxLength={160}/></label><div className="form-row">{!editing&&<label>Organization<select name="organization_id" required>{orgs.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</select></label>}<label>Start date<input name="start_date" type="date" defaultValue={editing?.start_date||''}/></label></div><div className="form-row"><label>Response code<input name="code" defaultValue={editing?.code||''} disabled={!!editing} placeholder="FLOOD-26-04" required pattern="[A-Za-z0-9-]{3,40}"/></label><label>Location<input name="location" defaultValue={editing?.location||''} placeholder="District or region" required minLength={2}/></label></div><label>Short summary<textarea name="summary" defaultValue={editing?.summary||''} rows={3} minLength={10} placeholder="What is this response coordinating? Use general information only." required/></label>{editing&&<label>Response status<select name="status" defaultValue={editing.status}><option value="draft">Draft</option><option value="in_review">In review</option><option value="approved">Approved</option><option value="closed">Closed</option></select></label>}<div className="modal-note"><ShieldCheck size={16}/><span>{editing?'Changes are saved to this demo workspace.':'This creates a private draft in the demo.'} Do not enter personal or sensitive information.</span></div><div className="modal-actions">{editing?.status==='draft'&&<button type="button" className="button danger" onClick={()=>void deleteResponse()}>Delete draft</button>}<button type="button" className="button secondary" onClick={()=>{setModal(false);setEditing(null)}}>Cancel</button><button disabled={saving} className="button primary"><Plus size={15}/>{saving?'Saving…':editing?'Save changes':'Save draft'}</button></div></form></section></div>}</div>
+export default function App() {
+  const [session, setSession] = useState(false);
+  const [profile, setProfile] = useState<{
+    full_name: string;
+    email: string;
+    organizations: { id: number; name: string; role: string }[];
+  } | null>(null);
+  const [page, setPage] = useState<Page>("Overview");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [dashboard, setDashboard] = useState<Dashboard | null>(null);
+  const [responses, setResponses] = useState<ResponseRow[]>([]);
+  const [funding, setFunding] = useState<FundingRow[]>([]);
+  const [issues, setIssues] = useState<Issue[]>([]);
+  const [orgs, setOrgs] = useState<Organization[]>([]);
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [modal, setModal] = useState(false);
+  const [editing, setEditing] = useState<ResponseRow | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [notice, setNotice] = useState("");
+  const importRef = useRef<HTMLInputElement>(null);
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const [d, r, f, i, o] = await Promise.all([
+        get<Dashboard>("/api/dashboard"),
+        get<ResponseRow[]>("/api/responses"),
+        get<FundingRow[]>("/api/funding-records"),
+        get<Issue[]>("/api/issues"),
+        get<Organization[]>("/api/organizations"),
+      ]);
+      setDashboard(d);
+      setResponses(r);
+      setFunding(f);
+      setIssues(i);
+      setOrgs(o);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not reach the API");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+  useEffect(() => {
+    if (!session) {
+      setProfile(null);
+      setLoading(false);
+      return;
+    }
+    void get<typeof profile>("/api/auth/me")
+      .then((data) => {
+        setProfile(data);
+        return refresh();
+      })
+      .catch((err) => {
+        setSession(false);
+        setError(err instanceof Error ? err.message : "Please sign in again");
+      });
+  }, [session, refresh]);
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(""), 4200);
+    return () => clearTimeout(timer);
+  }, [notice]);
+  const filteredFunding = useMemo(
+    () =>
+      funding.filter((x) =>
+        `${x.response_title} ${x.reference} ${x.source_name} ${x.record_type}`
+          .toLowerCase()
+          .includes(query.toLowerCase()),
+      ),
+    [funding, query],
+  );
+  const filteredResponses = useMemo(
+    () =>
+      responses.filter(
+        (x) =>
+          `${x.title} ${x.code} ${x.location} ${x.organization_name}`
+            .toLowerCase()
+            .includes(query.toLowerCase()) &&
+          (statusFilter === "all" || x.status === statusFilter),
+      ),
+    [responses, query, statusFilter],
+  );
+  async function createResponse(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setSaving(true);
+    const form = new FormData(e.currentTarget);
+    try {
+      if (editing) {
+        await send(`/api/responses/${editing.id}`, "PATCH", {
+          title: form.get("title"),
+          location: form.get("location"),
+          summary: form.get("summary"),
+          status: form.get("status"),
+          start_date: form.get("start_date") || null,
+        });
+        setNotice("Response changes saved.");
+      } else {
+        await send("/api/responses", "POST", {
+          organization_id: Number(form.get("organization_id")),
+          code: form.get("code"),
+          title: form.get("title"),
+          location: form.get("location"),
+          summary: form.get("summary"),
+          start_date: form.get("start_date") || null,
+        });
+        setNotice("Response saved as a draft.");
+      }
+      setModal(false);
+      setEditing(null);
+      await refresh();
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : "Could not save response");
+    } finally {
+      setSaving(false);
+    }
+  }
+  async function deleteResponse() {
+    if (
+      !editing ||
+      !window.confirm(`Delete the empty draft “${editing.title}”?`)
+    )
+      return;
+    try {
+      await send(`/api/responses/${editing.id}`, "DELETE");
+      setModal(false);
+      setEditing(null);
+      setNotice("Draft deleted.");
+      await refresh();
+    } catch (err) {
+      setNotice(
+        err instanceof Error ? err.message : "Could not delete this draft",
+      );
+    }
+  }
+  async function resolve(id: number) {
+    try {
+      await send(`/api/issues/${id}/resolve`, "PATCH");
+      setNotice("Review item marked as resolved.");
+      await refresh();
+    } catch (err) {
+      setNotice(
+        err instanceof Error ? err.message : "Could not update review item",
+      );
+    }
+  }
+  async function signOut() {
+    try {
+      await send("/api/auth/logout", "POST");
+    } catch {}
+    setSession(false);
+  }
+  async function uploadCsv(e: ChangeEvent<HTMLInputElement>) {
+    const input = e.currentTarget;
+    const file = input.files?.[0];
+    if (!file) return;
+    const body = new FormData();
+    body.append("file", file);
+    try {
+      const response = await fetch(`${API}/api/imports/csv`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "X-CSRF-Token": csrfToken() },
+        body,
+      });
+      const data = await response.json();
+      if (!response.ok)
+        throw new Error(data.detail || "Could not import this file.");
+      setNotice(
+        `Import complete: ${data.rows_imported} added, ${data.rows_skipped} duplicate rows skipped.`,
+      );
+      await refresh();
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : "Could not import CSV");
+    } finally {
+      input.value = "";
+    }
+  }
+  function exportCsv() {
+    const data = [
+      [
+        "response_code",
+        "record_type",
+        "amount",
+        "currency",
+        "recorded_on",
+        "reference",
+        "source_reference",
+        "description",
+      ],
+      ...funding.map((x) => [
+        x.response_code,
+        x.record_type,
+        x.amount,
+        x.currency,
+        x.recorded_on,
+        x.reference,
+        x.source_reference,
+        x.description,
+      ]),
+    ];
+    const csv = data
+      .map((row) =>
+        row
+          .map((value) => {
+            const text = String(value ?? "");
+            const safe = /^[=+@\-\t\r]/.test(text) ? `'${text}` : text;
+            return `"${safe.replace(/"/g, '""')}"`;
+          })
+          .join(","),
+      )
+      .join("\r\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "relieftrail-funding-records-demo.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+    setNotice("Demo records exported as an import-ready CSV.");
+  }
+  const canEdit =
+    profile?.organizations.some(
+      (o) => o.role === "org_admin" || o.role === "editor",
+    ) ?? false;
+  const canReview =
+    profile?.organizations.some((o) =>
+      ["org_admin", "editor", "reviewer"].includes(o.role),
+    ) ?? false;
+  const nav: { label: Page; icon: typeof LayoutDashboard; count?: number }[] = [
+    { label: "Overview", icon: LayoutDashboard },
+    { label: "Responses", icon: BookOpenCheck },
+    { label: "Awards & budgets", icon: Landmark },
+    { label: "Reporting calendar", icon: CalendarDays },
+    { label: "Funding records", icon: HandCoins },
+    {
+      label: "Review queue",
+      icon: TriangleAlert,
+      count: issues.filter((x) => x.status === "open").length,
+    },
+    { label: "Activity log", icon: FileClock },
+    ...(profile?.organizations.some((o) => o.role === "org_admin")
+      ? [{ label: "Team access" as Page, icon: UsersRound }]
+      : []),
+  ];
+  if (!session) return <SignIn onLogin={() => setSession(true)} />;
+  if (!profile)
+    return <div className="auth-loading">Checking organization access…</div>;
+  return (
+    <div className="app-shell">
+      <aside className={`sidebar ${menuOpen ? "sidebar-open" : ""}`}>
+        <a
+          className="brand"
+          href="#overview"
+          onClick={() => setPage("Overview")}
+        >
+          <span className="brand-mark">
+            <Activity size={19} />
+          </span>
+          <span className="brand-word">
+            relieftrail<span>RESPONSEHUB</span>
+          </span>
+        </a>
+        <div className="workspace-switch">
+          <span className="org-avatar">
+            {initial(profile.organizations[0]?.name || "Demo")}
+          </span>
+          <span className="org-copy">
+            <b>{profile.organizations[0]?.name || "Demo workspace"}</b>
+            <small>
+              {profile.organizations[0]?.role.replace("_", " ").toUpperCase() ||
+                "MEMBER"}
+            </small>
+          </span>
+          <ChevronDown size={15} />
+        </div>
+        <div className="nav-caption">WORKSPACE</div>
+        <nav>
+          {nav.map((item) => (
+            <button
+              key={item.label}
+              className={`nav-item ${page === item.label ? "selected" : ""}`}
+              onClick={() => {
+                setPage(item.label);
+                setMenuOpen(false);
+              }}
+            >
+              <item.icon size={17} />
+              <span>{item.label}</span>
+              {item.count ? (
+                <span className="nav-count">{item.count}</span>
+              ) : null}
+            </button>
+          ))}
+        </nav>
+        <div className="sidebar-bottom">
+          <div className="secure-note">
+            <ShieldCheck size={17} />
+            <span>
+              <b>Demo workspace</b>
+              <small>Sample data only · access scoped</small>
+            </span>
+          </div>
+          <button
+            className="profile profile-button"
+            onClick={() => void signOut()}
+          >
+            <span className="profile-avatar">{initial(profile.full_name)}</span>
+            <span>
+              <b>{profile.full_name}</b>
+              <small>Sign out</small>
+            </span>
+            <ChevronDown size={14} />
+          </button>
+        </div>
+      </aside>
+      <main className="main">
+        <header className="topbar">
+          <button
+            className="mobile-menu icon-button"
+            aria-label="Open navigation"
+            onClick={() => setMenuOpen(!menuOpen)}
+          >
+            <Menu size={19} />
+          </button>
+          <div className="crumb">
+            Workspace <span>/</span> <b>{page}</b>
+          </div>
+          <div className="top-actions">
+            <button className="icon-button" aria-label="Help">
+              <CircleHelp size={17} />
+            </button>
+            <button
+              className="icon-button notification"
+              aria-label="Notifications"
+            >
+              <Bell size={17} />
+              <i />
+            </button>
+            <span className="top-divider" />
+            <span className="top-date">{today}</span>
+            <span className="top-avatar">{initial(profile.full_name)}</span>
+          </div>
+        </header>
+        <div className="page-content">
+          {error && (
+            <div className="error-banner">
+              <TriangleAlert size={17} />
+              <span>
+                <b>Can’t connect to the demo database.</b> Start the API and
+                database with the steps in the README. {error}
+              </span>
+              <button onClick={() => void refresh()}>
+                <RefreshCw size={14} /> Try again
+              </button>
+            </div>
+          )}
+          {notice && (
+            <div className="toast">
+              <Check size={16} />
+              {notice}
+              <button aria-label="Dismiss" onClick={() => setNotice("")}>
+                <X size={15} />
+              </button>
+            </div>
+          )}
+          {page === "Overview" && (
+            <Overview
+              dashboard={dashboard}
+              issues={issues}
+              loading={loading}
+              canResolve={canReview}
+              onNavigate={setPage}
+              onExport={exportCsv}
+              onResolve={resolve}
+            />
+          )}
+          {page === "Responses" && (
+            <Responses
+              rows={filteredResponses}
+              loading={loading}
+              query={query}
+              setQuery={setQuery}
+              statusFilter={statusFilter}
+              setStatusFilter={setStatusFilter}
+              canEdit={canEdit}
+              onAdd={() => {
+                setEditing(null);
+                setModal(true);
+              }}
+              onEdit={(row) => {
+                setEditing(row);
+                setModal(true);
+              }}
+            />
+          )}
+          {page === "Funding records" && (
+            <Funding
+              rows={filteredFunding}
+              loading={loading}
+              query={query}
+              setQuery={setQuery}
+              canEdit={canEdit}
+              onExport={exportCsv}
+              onImport={() => importRef.current?.click()}
+            />
+          )}
+          {page === "Awards & budgets" && (
+            <Awards
+              orgId={profile.organizations[0]?.id}
+              responses={responses}
+              canEdit={canEdit}
+              onNotice={setNotice}
+              onRefresh={refresh}
+            />
+          )}
+          {page === "Reporting calendar" && (
+            <Reporting
+              canEdit={canEdit}
+              canReview={profile.organizations.some((o) =>
+                ["org_admin", "reviewer"].includes(o.role),
+              )}
+              onNotice={setNotice}
+            />
+          )}
+          {page === "Team access" && (
+            <Team orgId={profile.organizations[0]?.id} onNotice={setNotice} />
+          )}
+          {page === "Review queue" && (
+            <ReviewQueue
+              issues={issues}
+              loading={loading}
+              canResolve={canReview}
+              onResolve={resolve}
+            />
+          )}
+          {page === "Activity log" && <Audit />}
+          <footer className="page-footer">
+            <span>
+              ReliefTrail Funding Workspace{" "}
+              <span className="footer-dot">·</span> Fictional portfolio demo
+            </span>
+            <span>
+              Records show what was reported; they do not prove aid delivery.
+            </span>
+          </footer>
+        </div>
+      </main>
+      <input
+        ref={importRef}
+        type="file"
+        accept=".csv,text/csv"
+        hidden
+        onChange={uploadCsv}
+      />
+      {modal && (
+        <div
+          className="modal-backdrop"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setModal(false);
+          }}
+        >
+          <section className="modal">
+            <div className="modal-head">
+              <div>
+                <div className="eyebrow">
+                  {editing ? "EDIT RESPONSE" : "NEW RESPONSE"}
+                </div>
+                <h2>{editing ? "Edit response" : "Create a response"}</h2>
+                <p>
+                  {editing
+                    ? "Update the response details and save your changes."
+                    : "Start with the basics. New responses are saved as drafts."}
+                </p>
+              </div>
+              <button
+                className="icon-button"
+                aria-label="Close"
+                onClick={() => setModal(false)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={createResponse}>
+              <label>
+                Response name
+                <input
+                  name="title"
+                  defaultValue={editing?.title || ""}
+                  placeholder="e.g. River district flood response"
+                  required
+                  minLength={3}
+                  maxLength={160}
+                />
+              </label>
+              <div className="form-row">
+                {!editing && (
+                  <label>
+                    Organization
+                    <select name="organization_id" required>
+                      {orgs.map((o) => (
+                        <option key={o.id} value={o.id}>
+                          {o.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                <label>
+                  Start date
+                  <input
+                    name="start_date"
+                    type="date"
+                    defaultValue={editing?.start_date || ""}
+                  />
+                </label>
+              </div>
+              <div className="form-row">
+                <label>
+                  Response code
+                  <input
+                    name="code"
+                    defaultValue={editing?.code || ""}
+                    disabled={!!editing}
+                    placeholder="FLOOD-26-04"
+                    required
+                    pattern="[A-Za-z0-9-]{3,40}"
+                  />
+                </label>
+                <label>
+                  Location
+                  <input
+                    name="location"
+                    defaultValue={editing?.location || ""}
+                    placeholder="District or region"
+                    required
+                    minLength={2}
+                  />
+                </label>
+              </div>
+              <label>
+                Short summary
+                <textarea
+                  name="summary"
+                  defaultValue={editing?.summary || ""}
+                  rows={3}
+                  minLength={10}
+                  placeholder="What is this response coordinating? Use general information only."
+                  required
+                />
+              </label>
+              {editing && (
+                <label>
+                  Response status
+                  <select name="status" defaultValue={editing.status}>
+                    <option value="draft">Draft</option>
+                    <option value="in_review">In review</option>
+                    <option value="approved">Approved</option>
+                    <option value="closed">Closed</option>
+                  </select>
+                </label>
+              )}
+              <div className="modal-note">
+                <ShieldCheck size={16} />
+                <span>
+                  {editing
+                    ? "Changes are saved to this demo workspace."
+                    : "This creates a private draft in the demo."}{" "}
+                  Do not enter personal or sensitive information.
+                </span>
+              </div>
+              <div className="modal-actions">
+                {editing?.status === "draft" && (
+                  <button
+                    type="button"
+                    className="button danger"
+                    onClick={() => void deleteResponse()}
+                  >
+                    Delete draft
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="button secondary"
+                  onClick={() => {
+                    setModal(false);
+                    setEditing(null);
+                  }}
+                >
+                  Cancel
+                </button>
+                <button disabled={saving} className="button primary">
+                  <Plus size={15} />
+                  {saving ? "Saving…" : editing ? "Save changes" : "Save draft"}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
+    </div>
+  );
 }
 
-function SignIn({onLogin}:{onLogin:(token:string)=>void}){
- const [email,setEmail]=useState('admin@relieftrail.test');const [password,setPassword]=useState('demo-change-me');const [error,setError]=useState('');const [busy,setBusy]=useState(false)
- async function submit(e:FormEvent<HTMLFormElement>){e.preventDefault();setBusy(true);setError('');try{const response=await fetch(`${API}/api/auth/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})});const data=await response.json();if(!response.ok)throw new Error(data.detail||'Sign-in failed');onLogin(data.access_token)}catch(e){setError(e instanceof Error?e.message:'Could not sign in. Start the API and database first.')}finally{setBusy(false)}}
- return <div className="signin-screen"><div className="signin-card"><a className="brand signin-brand" href="#"><span className="brand-mark"><Activity size={19}/></span><span className="brand-word">relieftrail<span>FUNDING WORKSPACE</span></span></a><div className="signin-kicker">DEMO WORKSPACE</div><h1>Welcome back</h1><p className="signin-intro">Sign in to review fictional response funding records. Each session only sees organizations it belongs to.</p><form onSubmit={submit}><label>Email address<input type="email" autoComplete="username" value={email} onChange={e=>setEmail(e.target.value)} required/></label><label>Password<input type="password" autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} required/></label>{error&&<div className="signin-error" role="alert">{error}</div>}<button className="button primary signin-submit" disabled={busy}>{busy?'Signing in…':'Sign in securely'}</button></form><div className="demo-login"><ShieldCheck size={16}/><span><b>Portfolio demo login</b><small>admin@relieftrail.test · demo-change-me</small></span></div><p className="signin-foot">Sample data only. Do not enter real personal, donor, or payment details.</p></div><div className="signin-aside"><div className="signin-aside-mark"><HandCoins size={24}/></div><p>Funding records in context.</p><h2>Make response funding easier to review.</h2><span>Organization-scoped access · Role checks · Traceable actions</span></div></div>
+function Awards({
+  orgId,
+  responses,
+  canEdit,
+  onNotice,
+  onRefresh,
+}: {
+  orgId: number | undefined;
+  responses: ResponseRow[];
+  canEdit: boolean;
+  onNotice: (s: string) => void;
+  onRefresh: () => Promise<void>;
+}) {
+  const [items, setItems] = useState<Award[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [show, setShow] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [allocation, setAllocation] = useState<Award | null>(null);
+  async function load() {
+    try {
+      setItems(await get<Award[]>("/api/awards"));
+    } catch (e) {
+      onNotice(e instanceof Error ? e.message : "Could not load awards");
+    } finally {
+      setLoading(false);
+    }
+  }
+  useEffect(() => {
+    void load();
+  }, []);
+  async function create(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setSaving(true);
+    const f = new FormData(e.currentTarget);
+    const body = {
+      organization_id: orgId,
+      response_id: Number(f.get("response_id")),
+      funder_name: f.get("funder_name"),
+      funder_kind: f.get("funder_kind"),
+      award_code: f.get("award_code"),
+      title: f.get("title"),
+      total_amount: Number(f.get("total_amount")),
+      start_date: f.get("start_date"),
+      end_date: f.get("end_date"),
+      restricted_purpose: f.get("restricted_purpose"),
+      allocation_category: f.get("allocation_category"),
+      budget_amount: Number(f.get("budget_amount")),
+      first_report_due: f.get("first_report_due"),
+    };
+    try {
+      await send("/api/awards", "POST", body);
+      setShow(false);
+      onNotice("Award and budget created.");
+      await load();
+    } catch (err) {
+      onNotice(err instanceof Error ? err.message : "Could not create award");
+    } finally {
+      setSaving(false);
+    }
+  }
+  async function disburse(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!allocation) return;
+    const f = new FormData(e.currentTarget);
+    try {
+      await send("/api/disbursements", "POST", {
+        allocation_id: Number(f.get("allocation_id")),
+        amount: Number(f.get("amount")),
+        recorded_on: f.get("recorded_on"),
+        reference: f.get("reference"),
+        source_reference: f.get("source_reference"),
+        description: f.get("description"),
+      });
+      setAllocation(null);
+      onNotice("Disbursement recorded against the award budget.");
+      await load();
+      await onRefresh();
+    } catch (err) {
+      onNotice(
+        err instanceof Error ? err.message : "Could not record disbursement",
+      );
+    }
+  }
+  return (
+    <>
+      <PageTitle
+        eyebrow="GRANT MANAGEMENT"
+        title="Awards & budgets"
+        description="Track funders, approved award limits, spending, and reporting obligations."
+        action={
+          canEdit ? (
+            <button className="button primary" onClick={() => setShow(true)}>
+              <Plus size={15} />
+              New award
+            </button>
+          ) : undefined
+        }
+      />
+      <div className="page-hint">
+        <ShieldCheck size={16} />
+        <span>
+          Awards can only be assigned to an approved response. Spending is
+          checked against the budget line before it is saved.
+        </span>
+      </div>
+      <article className="card table-card">
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>AWARD / FUNDER</th>
+                <th>PERIOD</th>
+                <th>AWARD LIMIT</th>
+                <th>ALLOCATED</th>
+                <th>SPENT</th>
+                <th>REPORTS DUE</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan={7}>
+                    <LoadingRows />
+                  </td>
+                </tr>
+              ) : (
+                items.map((a) => {
+                  const remaining = Math.max(
+                    0,
+                    Number(a.total_amount) - Number(a.disbursed_amount),
+                  );
+                  return (
+                    <tr key={a.id}>
+                      <td>
+                        <span className="table-primary">{a.title}</span>
+                        <span className="table-secondary">
+                          {a.award_code} · {a.funder_name}
+                        </span>
+                        <span className="table-secondary">
+                          {a.allocations
+                            .map((x) => `${x.response_code} · ${x.category}`)
+                            .join(" / ")}
+                        </span>
+                      </td>
+                      <td>
+                        {shortDate(a.start_date)} – {shortDate(a.end_date)}
+                      </td>
+                      <td className="amount">{money(a.total_amount)}</td>
+                      <td className="amount">{money(a.allocated_amount)}</td>
+                      <td>
+                        <span className="table-primary">
+                          {money(a.disbursed_amount)}
+                        </span>
+                        <span className="table-secondary">
+                          {money(remaining)} remaining
+                        </span>
+                      </td>
+                      <td>{a.reports_due}</td>
+                      <td>
+                        {canEdit && a.allocations.length > 0 && (
+                          <button
+                            className="row-menu"
+                            onClick={() => setAllocation(a)}
+                          >
+                            Record spend
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+              {!loading && !items.length && (
+                <tr>
+                  <td colSpan={7}>
+                    <Empty message="No awards yet. Create one for an approved response." />
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </article>
+      {show && (
+        <div className="modal-backdrop">
+          <section className="modal">
+            <div className="modal-head">
+              <div>
+                <div className="eyebrow">FUNDING AGREEMENT</div>
+                <h2>Create an award</h2>
+                <p>
+                  Enter the agreed amount and the response budget it will
+                  support.
+                </p>
+              </div>
+              <button className="icon-button" onClick={() => setShow(false)}>
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={create}>
+              <div className="form-row">
+                <label>
+                  Approved response
+                  <select name="response_id" required>
+                    {responses
+                      .filter((r) => r.status === "approved")
+                      .map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.code} · {r.title}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                <label>
+                  Funder type
+                  <select name="funder_kind">
+                    <option value="foundation">Foundation</option>
+                    <option value="government">Government</option>
+                    <option value="institutional_donor">
+                      Institutional donor
+                    </option>
+                    <option value="corporate">Corporate</option>
+                  </select>
+                </label>
+              </div>
+              <div className="form-row">
+                <label>
+                  Funder name
+                  <input name="funder_name" required minLength={2} />
+                </label>
+                <label>
+                  Award code
+                  <input
+                    name="award_code"
+                    required
+                    pattern="[A-Za-z0-9-]{3,40}"
+                    placeholder="GRANT-2026-01"
+                  />
+                </label>
+              </div>
+              <label>
+                Award name
+                <input name="title" required minLength={3} />
+              </label>
+              <div className="form-row">
+                <label>
+                  Total award ($)
+                  <input
+                    type="number"
+                    name="total_amount"
+                    min="0.01"
+                    step="0.01"
+                    required
+                  />
+                </label>
+                <label>
+                  Response budget ($)
+                  <input
+                    type="number"
+                    name="budget_amount"
+                    min="0.01"
+                    step="0.01"
+                    required
+                  />
+                </label>
+              </div>
+              <div className="form-row">
+                <label>
+                  Budget category
+                  <input
+                    name="allocation_category"
+                    required
+                    placeholder="Emergency shelter"
+                  />
+                </label>
+                <label>
+                  Restricted purpose
+                  <input
+                    name="restricted_purpose"
+                    required
+                    minLength={5}
+                    placeholder="Use for shelter and supplies"
+                  />
+                </label>
+              </div>
+              <div className="form-row">
+                <label>
+                  Start date
+                  <input type="date" name="start_date" required />
+                </label>
+                <label>
+                  End date
+                  <input type="date" name="end_date" required />
+                </label>
+              </div>
+              <label>
+                First report due
+                <input type="date" name="first_report_due" required />
+              </label>
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="button secondary"
+                  onClick={() => setShow(false)}
+                >
+                  Cancel
+                </button>
+                <button className="button primary" disabled={saving}>
+                  {saving ? "Saving…" : "Create award"}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
+      {allocation && (
+        <div className="modal-backdrop">
+          <section className="modal">
+            <div className="modal-head">
+              <div>
+                <div className="eyebrow">CONTROLLED DISBURSEMENT</div>
+                <h2>Record spending</h2>
+                <p>
+                  {allocation.title} · current award ceiling{" "}
+                  {money(allocation.total_amount)}
+                </p>
+              </div>
+              <button
+                className="icon-button"
+                onClick={() => setAllocation(null)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={disburse}>
+              <label>
+                Budget line
+                <select name="allocation_id">
+                  {allocation.allocations.map((x) => (
+                    <option key={x.id} value={x.id}>
+                      {x.response_code} · {x.category} ·{" "}
+                      {money(x.budget_amount)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="form-row">
+                <label>
+                  Amount ($)
+                  <input
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    name="amount"
+                    required
+                  />
+                </label>
+                <label>
+                  Date
+                  <input
+                    type="date"
+                    name="recorded_on"
+                    required
+                    defaultValue={new Date().toISOString().slice(0, 10)}
+                  />
+                </label>
+              </div>
+              <div className="form-row">
+                <label>
+                  Reference
+                  <input name="reference" required minLength={3} />
+                </label>
+                <label>
+                  Source reference
+                  <input name="source_reference" required minLength={3} />
+                </label>
+              </div>
+              <label>
+                Description
+                <input name="description" maxLength={1000} />
+              </label>
+              <div className="modal-note">
+                <ShieldCheck size={16} />
+                <span>
+                  The server checks the award dates and remaining budget before
+                  saving.
+                </span>
+              </div>
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="button secondary"
+                  onClick={() => setAllocation(null)}
+                >
+                  Cancel
+                </button>
+                <button className="button primary">Record spend</button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
+    </>
+  );
 }
 
-function PageTitle({eyebrow,title,description,action}:{eyebrow:string;title:string;description:string;action?:ReactNode}){return <div className="page-title-row"><div><div className="eyebrow">{eyebrow}</div><h1>{title}</h1><p>{description}</p></div>{action}</div>}
-function Overview({dashboard,issues,loading,canResolve,onNavigate,onExport,onResolve}:{dashboard:Dashboard|null;issues:Issue[];loading:boolean;canResolve:boolean;onNavigate:(p:Page)=>void;onExport:()=>void;onResolve:(id:number)=>void}){
- const s=dashboard?.summary;const top=Math.max(1,...(dashboard?.monthly??[]).flatMap(m=>[Number(m.contributions),Number(m.disbursements)]));const axisMax=Math.max(5000,Math.ceil(top/5000)*5000);return <><PageTitle eyebrow="FUNDING OPERATIONS" title="Good morning, Jamie" description="Here’s what’s happening across your response portfolio." action={<button className="button secondary" onClick={onExport}><Download size={15}/>Export records</button>}/><div className="demo-banner"><span className="demo-spark">✳</span><span><b>Portfolio demonstration</b><small>All organizations, responses, and financial amounts on this screen are fictional sample data.</small></span><span className="demo-chip">SAMPLE DATA</span></div>
- <section className="metric-grid"><Metric label="Total contributions" value={money(s?.contributed)} change="Across all demo responses" icon={ArrowDownLeft} tone="mint"/><Metric label="Recorded disbursements" value={money(s?.disbursed)} change="Reported spending records" icon={ArrowUpRight} tone="blue"/><Metric label="Approved responses" value={loading?'—':`${s?.active_responses??0}`} change={`${s?.response_count??0} total response records`} icon={BookOpenCheck} tone="peach"/><Metric label="Needs your review" value={loading?'—':`${s?.open_issues??0}`} change="Open reconciliation flags" icon={TriangleAlert} tone="lavender"/></section>
- <section className="overview-grid"><article className="card chart-card"><div className="card-head"><div><h2>Funding over time</h2><p>Recorded contributions and disbursements</p></div><span className="period-label">Last 6 months</span></div><div className="chart-legend"><span><i className="legend-contribution"/>Contributions</span><span><i className="legend-disbursement"/>Disbursements</span></div><div className="chart-area"><div className="y-labels"><span>{axisMoney(axisMax)}</span><span>{axisMoney(axisMax*.75)}</span><span>{axisMoney(axisMax*.5)}</span><span>{axisMoney(axisMax*.25)}</span><span>$0</span></div><div className="chart-plot"><div className="gridlines"><i/><i/><i/><i/><i/></div><div className="bars">{(dashboard?.monthly??[]).map((m,i)=><div className="bar-group" key={`${m.month}-${i}`}><div className="bar-pair"><div className="bar contribution-bar" style={{height:`${Math.max(3,Number(m.contributions)/axisMax*100)}%`}} title={`Contributions ${money(m.contributions)}`}/><div className="bar disbursement-bar" style={{height:`${Math.max(Number(m.disbursements)?3:0,Number(m.disbursements)/axisMax*100)}%`}} title={`Disbursements ${money(m.disbursements)}`}/></div><small>{m.month}</small></div>)}</div></div></div><div className="chart-foot"><span><b>{money(s?.contributed)}</b> total contributions</span><span><b>{money(s?.disbursed)}</b> total disbursements</span></div></article>
- <article className="card response-card"><div className="card-head"><div><h2>Response portfolio</h2><p>Quick view of active work</p></div><button className="link-button" onClick={()=>onNavigate('Responses')}>View all <span>→</span></button></div><ResponseSummaryPreview onNavigate={onNavigate} loading={loading}/><button className="add-response-link" onClick={()=>onNavigate('Responses')}><Plus size={14}/> View response portfolio</button></article></section>
- <section className="lower-grid"><article className="card records-card"><div className="card-head"><div><h2>Recent funding records</h2><p>Latest source records across responses</p></div><button className="link-button" onClick={()=>onNavigate('Funding records')}>All records <span>→</span></button></div><FundingTable rows={dashboard?.recent_records??[]} loading={loading} compact/></article><article className="card review-card"><div className="card-head"><div><h2>Review queue</h2><p>Items needing a human check</p></div><span className="count-pill">{issues.filter(i=>i.status==='open').length} open</span></div><div className="review-list">{loading?<LoadingRows/>:issues.filter(i=>i.status==='open').slice(0,3).map(i=><div className="review-item" key={i.id}><span className="review-icon"><TriangleAlert size={15}/></span><span className="review-copy"><b>{issueTitle(i.issue_type)}</b><small>{i.response_code} · {i.reference||'Needs a reference'}</small></span>{canResolve&&<button title="Mark resolved" aria-label="Mark resolved" className="resolve-button" onClick={()=>onResolve(i.id)}><Check size={15}/></button>}</div>)}{!loading&&!issues.some(i=>i.status==='open')&&<Empty message="Nothing needs review."/>}</div><button className="add-response-link" onClick={()=>onNavigate('Review queue')}>Open review queue <span>→</span></button></article></section>
- <div className="trust-callout"><ShieldCheck size={18}/><span><b>Source records stay traceable.</b> Funding entries are linked to their source and response; review flags help staff spot items that need follow-up.</span><button onClick={()=>onNavigate('Activity log')}>View activity log <span>→</span></button></div></>}
-function Metric({label,value,change,icon:Icon,tone}:{label:string;value:string;change:string;icon:typeof ArrowDownLeft;tone:string}){return <article className="metric-card"><div className="metric-top"><span>{label}</span><span className={`metric-icon ${tone}`}><Icon size={17}/></span></div><strong>{value}</strong><small>{change}</small></article>}
-function ResponseSummaryPreview({onNavigate,loading}:{onNavigate:(p:Page)=>void;loading:boolean}){const [list,setList]=useState<ResponseRow[]>([]);useEffect(()=>{void get<ResponseRow[]>('/api/responses').then(setList).catch(()=>{})},[]);return <div className="response-list">{loading?<LoadingRows/>:list.slice(0,3).map(r=><button className="response-row" key={r.id} onClick={()=>onNavigate('Responses')}><span className="response-symbol">{initial(r.title)}</span><span className="response-info"><b>{r.title}</b><small><MapPin size={11}/>{r.location}</small></span><span className={`status ${r.status}`}>{r.status.replace('_',' ')}</span><span className="row-arrow">›</span></button>)}{!loading&&!list.length&&<Empty message="No responses found."/>}</div>}
-function Responses({rows,loading,query,setQuery,statusFilter,setStatusFilter,canEdit,onAdd,onEdit}:{rows:ResponseRow[];loading:boolean;query:string;setQuery:(s:string)=>void;statusFilter:string;setStatusFilter:(s:string)=>void;canEdit:boolean;onAdd:()=>void;onEdit:(row:ResponseRow)=>void}){return <><PageTitle eyebrow="PORTFOLIO" title="Responses" description="Organize response records and see the funding attached to each one." action={canEdit?<button className="button primary" onClick={onAdd}><Plus size={16}/>New response</button>:undefined}/><div className="page-toolbar"><div className="search-box"><Search size={16}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search responses"/></div><select aria-label="Filter by response status" className="status-filter" value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}><option value="all">All statuses</option><option value="approved">Approved</option><option value="in_review">In review</option><option value="draft">Draft</option><option value="closed">Closed</option></select><span className="result-count">{rows.length} responses</span></div><article className="card table-card"><div className="table-scroll"><table><thead><tr><th>RESPONSE</th><th>ORGANIZATION</th><th>STATUS</th><th>CONTRIBUTIONS</th><th>DISBURSEMENTS</th><th>REVIEW</th><th/></tr></thead><tbody>{loading?<tr><td colSpan={7}><LoadingRows/></td></tr>:rows.map(r=><tr key={r.id}><td><span className="table-primary">{r.title}</span><span className="table-secondary">{r.code} · {r.location}</span></td><td>{r.organization_name}</td><td><span className={`status ${r.status}`}>{r.status.replace('_',' ')}</span></td><td className="amount">{money(r.contributed)}</td><td className="amount">{money(r.disbursed)}</td><td>{r.open_issues?<span className="issue-count"><TriangleAlert size={13}/>{r.open_issues} open</span>:<span className="clear-count"><Check size={13}/>Clear</span>}</td><td>{canEdit&&<button className="row-menu edit-row-button" onClick={()=>onEdit(r)}>Edit</button>}</td></tr>)}{!loading&&!rows.length&&<tr><td colSpan={7}><Empty message="No responses match those filters."/></td></tr>}</tbody></table></div><div className="table-bottom">Showing <b>{rows.length}</b> response records <span>Demo amounts are for illustration only.</span></div></article><div className="page-hint"><ShieldCheck size={16}/><span>New responses begin as drafts. Editors can update response details. Only organization admins can approve or close responses.</span></div></>}
-function Funding({rows,loading,query,setQuery,canEdit,onExport,onImport}:{rows:FundingRow[];loading:boolean;query:string;setQuery:(s:string)=>void;canEdit:boolean;onExport:()=>void;onImport:()=>void}){return <><PageTitle eyebrow="SOURCE RECORDS" title="Funding records" description="A traceable list of reported contributions and disbursements." action={<div className="title-actions"><a className="button secondary" href="/funding_import_template.csv" download><Download size={15}/>Template</a><button className="button secondary" onClick={onExport}><Download size={15}/>Export CSV</button>{canEdit&&<button className="button primary" onClick={onImport}><Upload size={15}/>Import CSV</button>}</div>}/><div className="page-toolbar"><div className="search-box"><Search size={16}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search records, sources, responses"/></div><span className="result-count">{rows.length} records</span></div><article className="card table-card"><FundingTable rows={rows} loading={loading}/></article><div className="page-hint"><FileSpreadsheet size={16}/><span>CSV imports are validated, deduplicated by source reference, and logged. Files are processed in memory and are not retained.</span></div></>}
-function FundingTable({rows,loading,compact=false}:{rows:FundingRow[];loading:boolean;compact?:boolean}){return <div className="table-scroll"><table><thead><tr><th>TYPE</th><th>RESPONSE</th><th>SOURCE</th><th>DATE</th><th>REFERENCE</th><th>AMOUNT</th>{!compact&&<th>REVIEW</th>}</tr></thead><tbody>{loading?<tr><td colSpan={compact?6:7}><LoadingRows/></td></tr>:rows.map(r=><tr key={r.id}><td><span className={`type-pill ${r.record_type}`}><i/>{r.record_type}</span></td><td><span className="table-primary">{r.response_title}</span><span className="table-secondary">{r.response_code}</span></td><td><span className="source-label"><FileSpreadsheet size={14}/>{r.source_name}</span></td><td>{shortDate(r.recorded_on)}</td><td className="mono">{r.reference}</td><td className="amount">{money(r.amount)}</td>{!compact&&<td>{r.open_issues?<span className="issue-count"><TriangleAlert size={13}/>Review</span>:<span className="clear-count"><Check size={13}/>Clear</span>}</td>}</tr>)}{!loading&&!rows.length&&<tr><td colSpan={compact?6:7}><Empty message="No funding records found."/></td></tr>}</tbody></table></div>}
-function ReviewQueue({issues,loading,canResolve,onResolve}:{issues:Issue[];loading:boolean;canResolve:boolean;onResolve:(id:number)=>void}){const open=issues.filter(i=>i.status==='open'),done=issues.filter(i=>i.status==='resolved');return <><PageTitle eyebrow="HUMAN REVIEW" title="Review queue" description="Check flagged records and resolve them when you’ve verified the source."/><div className="review-summary"><div><span className="summary-icon warning"><TriangleAlert size={19}/></span><span><b>{open.length} open items</b><small>Waiting for a human review</small></span></div><div><span className="summary-icon success"><Check size={19}/></span><span><b>{done.length} resolved</b><small>Marked complete in this demo</small></span></div></div><article className="card queue-card"><div className="card-head"><div><h2>Open review items</h2><p>Review the note and source record before resolving.</p></div><span className="count-pill">{open.length} open</span></div>{loading?<LoadingRows/>:<div className="queue-list">{open.map(i=><div className="queue-item" key={i.id}><span className="queue-alert"><TriangleAlert size={17}/></span><div className="queue-content"><div className="queue-title-row"><b>{issueTitle(i.issue_type)}</b><span className="status in_review">Open</span></div><p>{i.description}</p><small>{i.response_code}{i.reference?` · ${i.reference}`:''}{i.amount?` · ${money(i.amount)} ${i.currency}`:''} · Added {shortDate(i.created_at)}</small></div>{canResolve&&<button className="button secondary compact-button" onClick={()=>onResolve(i.id)}><Check size={14}/>Mark resolved</button>}</div>)}{!open.length&&<Empty message="Your review queue is clear."/>}</div>}</article><article className="card resolved-card"><div className="card-head"><div><h2>Resolved history</h2><p>Items marked complete</p></div></div>{done.length?done.map(i=><div className="history-row" key={i.id}><Check size={15}/><span><b>{issueTitle(i.issue_type)}</b><small>{i.response_code} · Resolved</small></span></div>):<div className="empty-inline">No items resolved yet.</div>}</article></>}
-function Audit(){const [items,setItems]=useState<{id:number;action:string;entity_type:string;entity_id:number;actor_label:string;details:Record<string,string>;created_at:string}[]>([]);const [loading,setLoading]=useState(true);useEffect(()=>{void get<typeof items>('/api/audit').then(setItems).catch(()=>{}).finally(()=>setLoading(false))},[]);return <><PageTitle eyebrow="ACCOUNTABILITY" title="Activity log" description="A simple history of actions recorded in this demo workspace."/><article className="card audit-card"><div className="card-head"><div><h2>Recent activity</h2><p>Demo events are sample records, not a production audit trail.</p></div></div>{loading?<LoadingRows/>:items.map((item,i)=><div className="audit-row" key={item.id}><span className={`audit-icon audit-${item.action}`}><Activity size={15}/></span><span className="audit-copy"><b>{auditDescription(item.action,item.entity_type)}</b><small>{item.actor_label} · {shortDate(item.created_at)}</small></span><span className="audit-time">Demo record {i+1}</span></div>)}</article><div className="page-hint"><ShieldCheck size={16}/><span>A production audit log should be append-only and identify the authenticated person responsible for each action.</span></div></>}
-function issueTitle(type:string){return ({missing_reference:'Missing source reference',possible_duplicate:'Possible duplicate record',amount_mismatch:'Amount needs verification',needs_review:'Record needs review'} as Record<string,string>)[type]??'Record needs review'}
-function auditDescription(action:string,type:string){const noun=type.replace('_',' ');return ({seeded:'Demo workspace sample data loaded',imported:'Funding data imported',flagged:'A reconciliation item was flagged',created:`A ${noun} was created`,resolved:`A ${noun} was resolved`} as Record<string,string>)[action]??`${action} · ${noun}`}
-function LoadingRows(){return <div className="loading-rows"><span/><span/><span/></div>}
-function Empty({message}:{message:string}){return <div className="empty-state"><span><BookOpenCheck size={19}/></span><b>{message}</b></div>}
+function Reporting({
+  canEdit,
+  canReview,
+  onNotice,
+}: {
+  canEdit: boolean;
+  canReview: boolean;
+  onNotice: (s: string) => void;
+}) {
+  const [items, setItems] = useState<Milestone[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [draft, setDraft] = useState<Milestone | null>(null);
+  async function load() {
+    try {
+      setItems(await get<Milestone[]>("/api/reporting-calendar"));
+    } catch (e) {
+      onNotice(
+        e instanceof Error ? e.message : "Could not load reporting calendar",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+  useEffect(() => {
+    void load();
+  }, []);
+  async function update(
+    item: Milestone,
+    status: "submitted" | "accepted" | "needs_revision",
+    summary?: string,
+  ) {
+    try {
+      await send(`/api/reporting-calendar/${item.id}`, "PATCH", {
+        status,
+        summary,
+      });
+      setDraft(null);
+      onNotice(
+        status === "submitted"
+          ? "Report submitted for review."
+          : status === "accepted"
+            ? "Report accepted."
+            : "Report returned for revision.",
+      );
+      await load();
+    } catch (e) {
+      onNotice(e instanceof Error ? e.message : "Could not update report");
+    }
+  }
+  return (
+    <>
+      <PageTitle
+        eyebrow="COMPLIANCE"
+        title="Reporting calendar"
+        description="See upcoming funder deadlines and submit or review progress summaries."
+      />
+      <article className="card table-card">
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>AWARD</th>
+                <th>FUNDER</th>
+                <th>REPORT PERIOD</th>
+                <th>DUE DATE</th>
+                <th>STATUS</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan={6}>
+                    <LoadingRows />
+                  </td>
+                </tr>
+              ) : (
+                items.map((m) => (
+                  <tr key={m.id}>
+                    <td>
+                      <span className="table-primary">{m.award_title}</span>
+                      <span className="table-secondary">
+                        {m.award_code} · {m.report_type} report
+                      </span>
+                    </td>
+                    <td>{m.funder_name}</td>
+                    <td>
+                      {shortDate(m.period_start)} – {shortDate(m.period_end)}
+                    </td>
+                    <td>{shortDate(m.due_date)}</td>
+                    <td>
+                      <span
+                        className={`status ${m.status === "accepted" ? "approved" : m.status === "submitted" ? "in_review" : "draft"}`}
+                      >
+                        {m.status.replace("_", " ")}
+                      </span>
+                    </td>
+                    <td>
+                      {((canEdit &&
+                        ["upcoming", "needs_revision"].includes(m.status)) ||
+                        (canReview && m.status === "submitted")) && (
+                        <button
+                          className="row-menu"
+                          onClick={() => setDraft(m)}
+                        >
+                          {m.status === "submitted"
+                            ? "Review"
+                            : "Submit report"}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+              {!loading && !items.length && (
+                <tr>
+                  <td colSpan={6}>
+                    <Empty message="Reporting milestones appear when an award is created." />
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </article>
+      {draft && (
+        <div className="modal-backdrop">
+          <section className="modal">
+            <div className="modal-head">
+              <div>
+                <div className="eyebrow">
+                  {draft.status === "submitted"
+                    ? "REVIEW SUBMISSION"
+                    : "REPORT SUBMISSION"}
+                </div>
+                <h2>{draft.award_title}</h2>
+                <p>
+                  Due {shortDate(draft.due_date)} · spending recorded so far:{" "}
+                  {money(draft.disbursed_amount)}
+                </p>
+              </div>
+              <button className="icon-button" onClick={() => setDraft(null)}>
+                <X size={18} />
+              </button>
+            </div>
+            {draft.status === "submitted" ? (
+              <>
+                <p className="report-summary">
+                  {draft.summary || "No summary supplied."}
+                </p>
+                <div className="modal-actions">
+                  <button
+                    className="button secondary"
+                    onClick={() =>
+                      void update(
+                        draft,
+                        "needs_revision",
+                        draft.summary || "Please provide more detail.",
+                      )
+                    }
+                  >
+                    Return for revision
+                  </button>
+                  <button
+                    className="button primary"
+                    onClick={() => void update(draft, "accepted")}
+                  >
+                    Accept report
+                  </button>
+                </div>
+              </>
+            ) : (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void update(
+                    draft,
+                    "submitted",
+                    String(new FormData(e.currentTarget).get("summary")),
+                  );
+                }}
+              >
+                <label>
+                  Progress summary
+                  <textarea
+                    name="summary"
+                    minLength={20}
+                    maxLength={3000}
+                    rows={5}
+                    required
+                    placeholder="Describe progress against the award purpose. Do not include personal details."
+                    defaultValue={draft.summary || ""}
+                  />
+                </label>
+                <div className="modal-note">
+                  <ShieldCheck size={16} />
+                  <span>
+                    Only share summary information appropriate for the funder.
+                    This demo stores no attachments.
+                  </span>
+                </div>
+                <div className="modal-actions">
+                  <button
+                    type="button"
+                    className="button secondary"
+                    onClick={() => setDraft(null)}
+                  >
+                    Cancel
+                  </button>
+                  <button className="button primary">Submit for review</button>
+                </div>
+              </form>
+            )}
+          </section>
+        </div>
+      )}
+    </>
+  );
+}
 
+function Team({
+  orgId,
+  onNotice,
+}: {
+  orgId: number | undefined;
+  onNotice: (s: string) => void;
+}) {
+  const [items, setItems] = useState<TeamMember[]>([]);
+  const [loading, setLoading] = useState(true);
+  async function load() {
+    if (!orgId) return;
+    try {
+      setItems(await get<TeamMember[]>(`/api/team?organization_id=${orgId}`));
+    } catch (e) {
+      onNotice(e instanceof Error ? e.message : "Could not load team");
+    } finally {
+      setLoading(false);
+    }
+  }
+  useEffect(() => {
+    void load();
+  }, [orgId]);
+  async function change(member: TeamMember, role: string) {
+    try {
+      await send(`/api/team/${member.id}?organization_id=${orgId}`, "PATCH", {
+        role,
+      });
+      onNotice(`${member.full_name}'s organization role updated.`);
+      await load();
+    } catch (e) {
+      onNotice(e instanceof Error ? e.message : "Could not change role");
+    }
+  }
+  return (
+    <>
+      <PageTitle
+        eyebrow="ACCESS CONTROL"
+        title="Team access"
+        description="Organization administrators assign the least access each teammate needs."
+      />
+      <div className="page-hint">
+        <ShieldCheck size={16} />
+        <span>
+          Roles apply to this organization only. An organization must always
+          keep at least one administrator.
+        </span>
+      </div>
+      <article className="card table-card">
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>TEAM MEMBER</th>
+                <th>STATUS</th>
+                <th>JOINED</th>
+                <th>ROLE</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan={4}>
+                    <LoadingRows />
+                  </td>
+                </tr>
+              ) : (
+                items.map((m) => (
+                  <tr key={m.id}>
+                    <td>
+                      <span className="table-primary">{m.full_name}</span>
+                      <span className="table-secondary">{m.email}</span>
+                    </td>
+                    <td>{m.is_active ? "Active" : "Disabled"}</td>
+                    <td>{shortDate(m.joined_at)}</td>
+                    <td>
+                      <select
+                        className="status-filter"
+                        value={m.role}
+                        onChange={(e) => void change(m, e.target.value)}
+                      >
+                        <option value="org_admin">Administrator</option>
+                        <option value="editor">Editor</option>
+                        <option value="reviewer">Reviewer</option>
+                        <option value="viewer">Viewer</option>
+                      </select>
+                    </td>
+                  </tr>
+                ))
+              )}
+              {!loading && !items.length && (
+                <tr>
+                  <td colSpan={4}>
+                    <Empty message="No team members found." />
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </article>
+    </>
+  );
+}
+
+function SignIn({ onLogin }: { onLogin: () => void }) {
+  const [email, setEmail] = useState("admin@relieftrail.test");
+  const [password, setPassword] = useState("demo-change-me");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function submit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      const csrfResponse = await fetch(`${API}/api/auth/csrf`, {
+        credentials: "include",
+      });
+      if (!csrfResponse.ok)
+        throw new Error("Could not start a secure sign-in.");
+      const response = await fetch(`${API}/api/auth/login`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": csrfToken(),
+        },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Sign-in failed");
+      onLogin();
+    } catch (e) {
+      setError(
+        e instanceof Error
+          ? e.message
+          : "Could not sign in. Start the API and database first.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="signin-screen">
+      <div className="signin-card">
+        <a className="brand signin-brand" href="#">
+          <span className="brand-mark">
+            <Activity size={19} />
+          </span>
+          <span className="brand-word">
+            relieftrail<span>RESPONSEHUB</span>
+          </span>
+        </a>
+        <div className="signin-kicker">DEMO WORKSPACE</div>
+        <h1>Welcome back</h1>
+        <p className="signin-intro">
+          Sign in to review response funding, grant budgets, and reporting
+          deadlines. Each session only sees organizations it belongs to.
+        </p>
+        <form onSubmit={submit}>
+          <label>
+            Email address
+            <input
+              type="email"
+              autoComplete="username"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </label>
+          <label>
+            Password
+            <input
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </label>
+          {error && (
+            <div className="signin-error" role="alert">
+              {error}
+            </div>
+          )}
+          <button className="button primary signin-submit" disabled={busy}>
+            {busy ? "Signing in…" : "Sign in securely"}
+          </button>
+        </form>
+        <div className="demo-login">
+          <ShieldCheck size={16} />
+          <span>
+            <b>Portfolio demo login</b>
+            <small>admin@relieftrail.test · demo-change-me</small>
+          </span>
+        </div>
+        <p className="signin-foot">
+          Sample data only. Do not enter real personal, donor, or payment
+          details.
+        </p>
+      </div>
+      <div className="signin-aside">
+        <div className="signin-aside-mark">
+          <HandCoins size={24} />
+        </div>
+        <p>Funding records in context.</p>
+        <h2>Make response funding easier to review.</h2>
+        <span>
+          Organization-scoped access · Role checks · Traceable actions
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function PageTitle({
+  eyebrow,
+  title,
+  description,
+  action,
+}: {
+  eyebrow: string;
+  title: string;
+  description: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="page-title-row">
+      <div>
+        <div className="eyebrow">{eyebrow}</div>
+        <h1>{title}</h1>
+        <p>{description}</p>
+      </div>
+      {action}
+    </div>
+  );
+}
+function Overview({
+  dashboard,
+  issues,
+  loading,
+  canResolve,
+  onNavigate,
+  onExport,
+  onResolve,
+}: {
+  dashboard: Dashboard | null;
+  issues: Issue[];
+  loading: boolean;
+  canResolve: boolean;
+  onNavigate: (p: Page) => void;
+  onExport: () => void;
+  onResolve: (id: number) => void;
+}) {
+  const s = dashboard?.summary;
+  const top = Math.max(
+    1,
+    ...(dashboard?.monthly ?? []).flatMap((m) => [
+      Number(m.contributions),
+      Number(m.disbursements),
+    ]),
+  );
+  const axisMax = Math.max(5000, Math.ceil(top / 5000) * 5000);
+  return (
+    <>
+      <PageTitle
+        eyebrow="FUNDING OPERATIONS"
+        title="Good morning, Jamie"
+        description="Here’s what’s happening across your response portfolio."
+        action={
+          <button className="button secondary" onClick={onExport}>
+            <Download size={15} />
+            Export records
+          </button>
+        }
+      />
+      <div className="demo-banner">
+        <span className="demo-spark">✳</span>
+        <span>
+          <b>Portfolio demonstration</b>
+          <small>
+            All organizations, responses, and financial amounts on this screen
+            are fictional sample data.
+          </small>
+        </span>
+        <span className="demo-chip">SAMPLE DATA</span>
+      </div>
+      <section className="metric-grid">
+        <Metric
+          label="Total contributions"
+          value={money(s?.contributed)}
+          change="Across all demo responses"
+          icon={ArrowDownLeft}
+          tone="mint"
+        />
+        <Metric
+          label="Recorded disbursements"
+          value={money(s?.disbursed)}
+          change="Reported spending records"
+          icon={ArrowUpRight}
+          tone="blue"
+        />
+        <Metric
+          label="Approved responses"
+          value={loading ? "—" : `${s?.active_responses ?? 0}`}
+          change={`${s?.response_count ?? 0} total response records`}
+          icon={BookOpenCheck}
+          tone="peach"
+        />
+        <Metric
+          label="Needs your review"
+          value={loading ? "—" : `${s?.open_issues ?? 0}`}
+          change="Open reconciliation flags"
+          icon={TriangleAlert}
+          tone="lavender"
+        />
+      </section>
+      <section className="overview-grid">
+        <article className="card chart-card">
+          <div className="card-head">
+            <div>
+              <h2>Funding over time</h2>
+              <p>Recorded contributions and disbursements</p>
+            </div>
+            <span className="period-label">Last 6 months</span>
+          </div>
+          <div className="chart-legend">
+            <span>
+              <i className="legend-contribution" />
+              Contributions
+            </span>
+            <span>
+              <i className="legend-disbursement" />
+              Disbursements
+            </span>
+          </div>
+          <div className="chart-area">
+            <div className="y-labels">
+              <span>{axisMoney(axisMax)}</span>
+              <span>{axisMoney(axisMax * 0.75)}</span>
+              <span>{axisMoney(axisMax * 0.5)}</span>
+              <span>{axisMoney(axisMax * 0.25)}</span>
+              <span>$0</span>
+            </div>
+            <div className="chart-plot">
+              <div className="gridlines">
+                <i />
+                <i />
+                <i />
+                <i />
+                <i />
+              </div>
+              <div className="bars">
+                {(dashboard?.monthly ?? []).map((m, i) => (
+                  <div className="bar-group" key={`${m.month}-${i}`}>
+                    <div className="bar-pair">
+                      <div
+                        className="bar contribution-bar"
+                        style={{
+                          height: `${Math.max(3, (Number(m.contributions) / axisMax) * 100)}%`,
+                        }}
+                        title={`Contributions ${money(m.contributions)}`}
+                      />
+                      <div
+                        className="bar disbursement-bar"
+                        style={{
+                          height: `${Math.max(Number(m.disbursements) ? 3 : 0, (Number(m.disbursements) / axisMax) * 100)}%`,
+                        }}
+                        title={`Disbursements ${money(m.disbursements)}`}
+                      />
+                    </div>
+                    <small>{m.month}</small>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="chart-foot">
+            <span>
+              <b>{money(s?.contributed)}</b> total contributions
+            </span>
+            <span>
+              <b>{money(s?.disbursed)}</b> total disbursements
+            </span>
+          </div>
+        </article>
+        <article className="card response-card">
+          <div className="card-head">
+            <div>
+              <h2>Response portfolio</h2>
+              <p>Quick view of active work</p>
+            </div>
+            <button
+              className="link-button"
+              onClick={() => onNavigate("Responses")}
+            >
+              View all <span>→</span>
+            </button>
+          </div>
+          <ResponseSummaryPreview onNavigate={onNavigate} loading={loading} />
+          <button
+            className="add-response-link"
+            onClick={() => onNavigate("Responses")}
+          >
+            <Plus size={14} /> View response portfolio
+          </button>
+        </article>
+      </section>
+      <section className="lower-grid">
+        <article className="card records-card">
+          <div className="card-head">
+            <div>
+              <h2>Recent funding records</h2>
+              <p>Latest source records across responses</p>
+            </div>
+            <button
+              className="link-button"
+              onClick={() => onNavigate("Funding records")}
+            >
+              All records <span>→</span>
+            </button>
+          </div>
+          <FundingTable
+            rows={dashboard?.recent_records ?? []}
+            loading={loading}
+            compact
+          />
+        </article>
+        <article className="card review-card">
+          <div className="card-head">
+            <div>
+              <h2>Review queue</h2>
+              <p>Items needing a human check</p>
+            </div>
+            <span className="count-pill">
+              {issues.filter((i) => i.status === "open").length} open
+            </span>
+          </div>
+          <div className="review-list">
+            {loading ? (
+              <LoadingRows />
+            ) : (
+              issues
+                .filter((i) => i.status === "open")
+                .slice(0, 3)
+                .map((i) => (
+                  <div className="review-item" key={i.id}>
+                    <span className="review-icon">
+                      <TriangleAlert size={15} />
+                    </span>
+                    <span className="review-copy">
+                      <b>{issueTitle(i.issue_type)}</b>
+                      <small>
+                        {i.response_code} · {i.reference || "Needs a reference"}
+                      </small>
+                    </span>
+                    {canResolve && (
+                      <button
+                        title="Mark resolved"
+                        aria-label="Mark resolved"
+                        className="resolve-button"
+                        onClick={() => onResolve(i.id)}
+                      >
+                        <Check size={15} />
+                      </button>
+                    )}
+                  </div>
+                ))
+            )}
+            {!loading && !issues.some((i) => i.status === "open") && (
+              <Empty message="Nothing needs review." />
+            )}
+          </div>
+          <button
+            className="add-response-link"
+            onClick={() => onNavigate("Review queue")}
+          >
+            Open review queue <span>→</span>
+          </button>
+        </article>
+      </section>
+      <div className="trust-callout">
+        <ShieldCheck size={18} />
+        <span>
+          <b>Source records stay traceable.</b> Funding entries are linked to
+          their source and response; review flags help staff spot items that
+          need follow-up.
+        </span>
+        <button onClick={() => onNavigate("Activity log")}>
+          View activity log <span>→</span>
+        </button>
+      </div>
+    </>
+  );
+}
+function Metric({
+  label,
+  value,
+  change,
+  icon: Icon,
+  tone,
+}: {
+  label: string;
+  value: string;
+  change: string;
+  icon: typeof ArrowDownLeft;
+  tone: string;
+}) {
+  return (
+    <article className="metric-card">
+      <div className="metric-top">
+        <span>{label}</span>
+        <span className={`metric-icon ${tone}`}>
+          <Icon size={17} />
+        </span>
+      </div>
+      <strong>{value}</strong>
+      <small>{change}</small>
+    </article>
+  );
+}
+function ResponseSummaryPreview({
+  onNavigate,
+  loading,
+}: {
+  onNavigate: (p: Page) => void;
+  loading: boolean;
+}) {
+  const [list, setList] = useState<ResponseRow[]>([]);
+  useEffect(() => {
+    void get<ResponseRow[]>("/api/responses")
+      .then(setList)
+      .catch(() => {});
+  }, []);
+  return (
+    <div className="response-list">
+      {loading ? (
+        <LoadingRows />
+      ) : (
+        list.slice(0, 3).map((r) => (
+          <button
+            className="response-row"
+            key={r.id}
+            onClick={() => onNavigate("Responses")}
+          >
+            <span className="response-symbol">{initial(r.title)}</span>
+            <span className="response-info">
+              <b>{r.title}</b>
+              <small>
+                <MapPin size={11} />
+                {r.location}
+              </small>
+            </span>
+            <span className={`status ${r.status}`}>
+              {r.status.replace("_", " ")}
+            </span>
+            <span className="row-arrow">›</span>
+          </button>
+        ))
+      )}
+      {!loading && !list.length && <Empty message="No responses found." />}
+    </div>
+  );
+}
+function Responses({
+  rows,
+  loading,
+  query,
+  setQuery,
+  statusFilter,
+  setStatusFilter,
+  canEdit,
+  onAdd,
+  onEdit,
+}: {
+  rows: ResponseRow[];
+  loading: boolean;
+  query: string;
+  setQuery: (s: string) => void;
+  statusFilter: string;
+  setStatusFilter: (s: string) => void;
+  canEdit: boolean;
+  onAdd: () => void;
+  onEdit: (row: ResponseRow) => void;
+}) {
+  return (
+    <>
+      <PageTitle
+        eyebrow="PORTFOLIO"
+        title="Responses"
+        description="Organize response records and see the funding attached to each one."
+        action={
+          canEdit ? (
+            <button className="button primary" onClick={onAdd}>
+              <Plus size={16} />
+              New response
+            </button>
+          ) : undefined
+        }
+      />
+      <div className="page-toolbar">
+        <div className="search-box">
+          <Search size={16} />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search responses"
+          />
+        </div>
+        <select
+          aria-label="Filter by response status"
+          className="status-filter"
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+        >
+          <option value="all">All statuses</option>
+          <option value="approved">Approved</option>
+          <option value="in_review">In review</option>
+          <option value="draft">Draft</option>
+          <option value="closed">Closed</option>
+        </select>
+        <span className="result-count">{rows.length} responses</span>
+      </div>
+      <article className="card table-card">
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>RESPONSE</th>
+                <th>ORGANIZATION</th>
+                <th>STATUS</th>
+                <th>CONTRIBUTIONS</th>
+                <th>DISBURSEMENTS</th>
+                <th>REVIEW</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan={7}>
+                    <LoadingRows />
+                  </td>
+                </tr>
+              ) : (
+                rows.map((r) => (
+                  <tr key={r.id}>
+                    <td>
+                      <span className="table-primary">{r.title}</span>
+                      <span className="table-secondary">
+                        {r.code} · {r.location}
+                      </span>
+                    </td>
+                    <td>{r.organization_name}</td>
+                    <td>
+                      <span className={`status ${r.status}`}>
+                        {r.status.replace("_", " ")}
+                      </span>
+                    </td>
+                    <td className="amount">{money(r.contributed)}</td>
+                    <td className="amount">{money(r.disbursed)}</td>
+                    <td>
+                      {r.open_issues ? (
+                        <span className="issue-count">
+                          <TriangleAlert size={13} />
+                          {r.open_issues} open
+                        </span>
+                      ) : (
+                        <span className="clear-count">
+                          <Check size={13} />
+                          Clear
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      {canEdit && (
+                        <button
+                          className="row-menu edit-row-button"
+                          onClick={() => onEdit(r)}
+                        >
+                          Edit
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+              {!loading && !rows.length && (
+                <tr>
+                  <td colSpan={7}>
+                    <Empty message="No responses match those filters." />
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <div className="table-bottom">
+          Showing <b>{rows.length}</b> response records{" "}
+          <span>Demo amounts are for illustration only.</span>
+        </div>
+      </article>
+      <div className="page-hint">
+        <ShieldCheck size={16} />
+        <span>
+          New responses begin as drafts. Editors can update response details.
+          Only organization admins can approve or close responses.
+        </span>
+      </div>
+    </>
+  );
+}
+function Funding({
+  rows,
+  loading,
+  query,
+  setQuery,
+  canEdit,
+  onExport,
+  onImport,
+}: {
+  rows: FundingRow[];
+  loading: boolean;
+  query: string;
+  setQuery: (s: string) => void;
+  canEdit: boolean;
+  onExport: () => void;
+  onImport: () => void;
+}) {
+  return (
+    <>
+      <PageTitle
+        eyebrow="SOURCE RECORDS"
+        title="Funding records"
+        description="A traceable list of reported contributions and disbursements."
+        action={
+          <div className="title-actions">
+            <a
+              className="button secondary"
+              href="/funding_import_template.csv"
+              download
+            >
+              <Download size={15} />
+              Template
+            </a>
+            <button className="button secondary" onClick={onExport}>
+              <Download size={15} />
+              Export CSV
+            </button>
+            {canEdit && (
+              <button className="button primary" onClick={onImport}>
+                <Upload size={15} />
+                Import CSV
+              </button>
+            )}
+          </div>
+        }
+      />
+      <div className="page-toolbar">
+        <div className="search-box">
+          <Search size={16} />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search records, sources, responses"
+          />
+        </div>
+        <span className="result-count">{rows.length} records</span>
+      </div>
+      <article className="card table-card">
+        <FundingTable rows={rows} loading={loading} />
+      </article>
+      <div className="page-hint">
+        <FileSpreadsheet size={16} />
+        <span>
+          CSV imports are validated, deduplicated by source reference, and
+          logged. Files are processed in memory and are not retained.
+        </span>
+      </div>
+    </>
+  );
+}
+function FundingTable({
+  rows,
+  loading,
+  compact = false,
+}: {
+  rows: FundingRow[];
+  loading: boolean;
+  compact?: boolean;
+}) {
+  return (
+    <div className="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>TYPE</th>
+            <th>RESPONSE</th>
+            <th>SOURCE</th>
+            <th>DATE</th>
+            <th>REFERENCE</th>
+            <th>AMOUNT</th>
+            {!compact && <th>REVIEW</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {loading ? (
+            <tr>
+              <td colSpan={compact ? 6 : 7}>
+                <LoadingRows />
+              </td>
+            </tr>
+          ) : (
+            rows.map((r) => (
+              <tr key={r.id}>
+                <td>
+                  <span className={`type-pill ${r.record_type}`}>
+                    <i />
+                    {r.record_type}
+                  </span>
+                </td>
+                <td>
+                  <span className="table-primary">{r.response_title}</span>
+                  <span className="table-secondary">{r.response_code}</span>
+                </td>
+                <td>
+                  <span className="source-label">
+                    <FileSpreadsheet size={14} />
+                    {r.source_name}
+                  </span>
+                </td>
+                <td>{shortDate(r.recorded_on)}</td>
+                <td className="mono">{r.reference}</td>
+                <td className="amount">{money(r.amount)}</td>
+                {!compact && (
+                  <td>
+                    {r.open_issues ? (
+                      <span className="issue-count">
+                        <TriangleAlert size={13} />
+                        Review
+                      </span>
+                    ) : (
+                      <span className="clear-count">
+                        <Check size={13} />
+                        Clear
+                      </span>
+                    )}
+                  </td>
+                )}
+              </tr>
+            ))
+          )}
+          {!loading && !rows.length && (
+            <tr>
+              <td colSpan={compact ? 6 : 7}>
+                <Empty message="No funding records found." />
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+function ReviewQueue({
+  issues,
+  loading,
+  canResolve,
+  onResolve,
+}: {
+  issues: Issue[];
+  loading: boolean;
+  canResolve: boolean;
+  onResolve: (id: number) => void;
+}) {
+  const open = issues.filter((i) => i.status === "open"),
+    done = issues.filter((i) => i.status === "resolved");
+  return (
+    <>
+      <PageTitle
+        eyebrow="HUMAN REVIEW"
+        title="Review queue"
+        description="Check flagged records and resolve them when you’ve verified the source."
+      />
+      <div className="review-summary">
+        <div>
+          <span className="summary-icon warning">
+            <TriangleAlert size={19} />
+          </span>
+          <span>
+            <b>{open.length} open items</b>
+            <small>Waiting for a human review</small>
+          </span>
+        </div>
+        <div>
+          <span className="summary-icon success">
+            <Check size={19} />
+          </span>
+          <span>
+            <b>{done.length} resolved</b>
+            <small>Marked complete in this demo</small>
+          </span>
+        </div>
+      </div>
+      <article className="card queue-card">
+        <div className="card-head">
+          <div>
+            <h2>Open review items</h2>
+            <p>Review the note and source record before resolving.</p>
+          </div>
+          <span className="count-pill">{open.length} open</span>
+        </div>
+        {loading ? (
+          <LoadingRows />
+        ) : (
+          <div className="queue-list">
+            {open.map((i) => (
+              <div className="queue-item" key={i.id}>
+                <span className="queue-alert">
+                  <TriangleAlert size={17} />
+                </span>
+                <div className="queue-content">
+                  <div className="queue-title-row">
+                    <b>{issueTitle(i.issue_type)}</b>
+                    <span className="status in_review">Open</span>
+                  </div>
+                  <p>{i.description}</p>
+                  <small>
+                    {i.response_code}
+                    {i.reference ? ` · ${i.reference}` : ""}
+                    {i.amount ? ` · ${money(i.amount)} ${i.currency}` : ""} ·
+                    Added {shortDate(i.created_at)}
+                  </small>
+                </div>
+                {canResolve && (
+                  <button
+                    className="button secondary compact-button"
+                    onClick={() => onResolve(i.id)}
+                  >
+                    <Check size={14} />
+                    Mark resolved
+                  </button>
+                )}
+              </div>
+            ))}
+            {!open.length && <Empty message="Your review queue is clear." />}
+          </div>
+        )}
+      </article>
+      <article className="card resolved-card">
+        <div className="card-head">
+          <div>
+            <h2>Resolved history</h2>
+            <p>Items marked complete</p>
+          </div>
+        </div>
+        {done.length ? (
+          done.map((i) => (
+            <div className="history-row" key={i.id}>
+              <Check size={15} />
+              <span>
+                <b>{issueTitle(i.issue_type)}</b>
+                <small>{i.response_code} · Resolved</small>
+              </span>
+            </div>
+          ))
+        ) : (
+          <div className="empty-inline">No items resolved yet.</div>
+        )}
+      </article>
+    </>
+  );
+}
+function Audit() {
+  const [items, setItems] = useState<
+    {
+      id: number;
+      action: string;
+      entity_type: string;
+      entity_id: number;
+      actor_label: string;
+      details: Record<string, string>;
+      created_at: string;
+    }[]
+  >([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    void get<typeof items>("/api/audit")
+      .then(setItems)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+  return (
+    <>
+      <PageTitle
+        eyebrow="ACCOUNTABILITY"
+        title="Activity log"
+        description="A simple history of actions recorded in this demo workspace."
+      />
+      <article className="card audit-card">
+        <div className="card-head">
+          <div>
+            <h2>Recent activity</h2>
+            <p>Demo events are sample records, not a production audit trail.</p>
+          </div>
+        </div>
+        {loading ? (
+          <LoadingRows />
+        ) : (
+          items.map((item, i) => (
+            <div className="audit-row" key={item.id}>
+              <span className={`audit-icon audit-${item.action}`}>
+                <Activity size={15} />
+              </span>
+              <span className="audit-copy">
+                <b>{auditDescription(item.action, item.entity_type)}</b>
+                <small>
+                  {item.actor_label} · {shortDate(item.created_at)}
+                </small>
+              </span>
+              <span className="audit-time">Demo record {i + 1}</span>
+            </div>
+          ))
+        )}
+      </article>
+      <div className="page-hint">
+        <ShieldCheck size={16} />
+        <span>
+          A production audit log should be append-only and identify the
+          authenticated person responsible for each action.
+        </span>
+      </div>
+    </>
+  );
+}
+function issueTitle(type: string) {
+  return (
+    (
+      {
+        missing_reference: "Missing source reference",
+        possible_duplicate: "Possible duplicate record",
+        amount_mismatch: "Amount needs verification",
+        needs_review: "Record needs review",
+      } as Record<string, string>
+    )[type] ?? "Record needs review"
+  );
+}
+function auditDescription(action: string, type: string) {
+  const noun = type.replace("_", " ");
+  return (
+    (
+      {
+        seeded: "Demo workspace sample data loaded",
+        imported: "Funding data imported",
+        flagged: "A reconciliation item was flagged",
+        created: `A ${noun} was created`,
+        resolved: `A ${noun} was resolved`,
+      } as Record<string, string>
+    )[action] ?? `${action} · ${noun}`
+  );
+}
+function LoadingRows() {
+  return (
+    <div className="loading-rows">
+      <span />
+      <span />
+      <span />
+    </div>
+  );
+}
+function Empty({ message }: { message: string }) {
+  return (
+    <div className="empty-state">
+      <span>
+        <BookOpenCheck size={19} />
+      </span>
+      <b>{message}</b>
+    </div>
+  );
+}

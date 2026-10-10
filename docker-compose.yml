@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: relieftrail
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local_demo_only}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - relieftrail_data:/var/lib/postgresql/data
       - ./database/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
@@ -20,15 +20,21 @@ services:
     build: ./backend
     environment:
       DATABASE_URL: postgresql://relieftrail:${POSTGRES_PASSWORD:-local_demo_only}@db:5432/relieftrail
-      APP_ENV: demo
+      APP_ENV: ${APP_ENV:-demo}
       APP_SECRET_KEY: ${APP_SECRET_KEY:-local-demo-only-change-before-deployment}
+      FRONTEND_ORIGINS: ${FRONTEND_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
       DEMO_EMAIL: ${DEMO_EMAIL:-admin@relieftrail.test}
       DEMO_PASSWORD: ${DEMO_PASSWORD:-demo-change-me}
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     depends_on:
       db:
         condition: service_healthy
+  frontend:
+    build: ./frontend
+    ports:
+      - "127.0.0.1:5173:5173"
+    depends_on:
+      - api
 volumes:
   relieftrail_data:
-

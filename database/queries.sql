@@ -34,4 +34,3 @@ INSERT INTO funding_records(response_id, source_id, record_type, amount, currenc
 VALUES (1, 2, 'contribution', 10.00, 'USD', CURRENT_DATE,
         'EXAMPLE-REF', 'EXAMPLE-SOURCE-ID')
 ON CONFLICT (response_id, source_id, source_reference) DO NOTHING;
-

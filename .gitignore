@@ -14,6 +14,9 @@ npm-debug.log*
 __pycache__/
 *.py[cod]
 .venv/
+.pytest_cache/
+.coverage
+htmlcov/
 
 # Local database / IDE
 *.dump
@@ -23,4 +26,3 @@ tmp/
 .idea/
 Thumbs.db
 .DS_Store
-
