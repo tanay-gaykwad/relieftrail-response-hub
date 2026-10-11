@@ -34,6 +34,8 @@ import {
   Upload,
   Landmark,
   UsersRound,
+  UserRound,
+  LogOut,
 } from "lucide-react";
 
 const API =
@@ -47,7 +49,8 @@ type Page =
   | "Reporting calendar"
   | "Team access"
   | "Review queue"
-  | "Activity log";
+  | "Activity log"
+  | "My profile";
 type ResponseRow = {
   id: number;
   code: string;
@@ -144,6 +147,11 @@ type TeamMember = {
   role: string;
   joined_at: string;
 };
+type Profile = {
+  full_name: string;
+  email: string;
+  organizations: { id: number; name: string; role: string }[];
+};
 
 function csrfToken() {
   const item = document.cookie
@@ -211,11 +219,7 @@ const today = new Intl.DateTimeFormat("en-US", {
 
 export default function App() {
   const [session, setSession] = useState(false);
-  const [profile, setProfile] = useState<{
-    full_name: string;
-    email: string;
-    organizations: { id: number; name: string; role: string }[];
-  } | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [page, setPage] = useState<Page>("Overview");
   const [menuOpen, setMenuOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -260,7 +264,7 @@ export default function App() {
       setLoading(false);
       return;
     }
-    void get<typeof profile>("/api/auth/me")
+    void get<Profile>("/api/auth/me")
       .then((data) => {
         setProfile(data);
         return refresh();
@@ -516,14 +520,18 @@ export default function App() {
           </div>
           <button
             className="profile profile-button"
-            onClick={() => void signOut()}
+            onClick={() => setPage("My profile")}
+            aria-label="Open my profile settings"
           >
             <span className="profile-avatar">{initial(profile.full_name)}</span>
             <span>
               <b>{profile.full_name}</b>
-              <small>Sign out</small>
+              <small>Profile and security</small>
             </span>
-            <ChevronDown size={14} />
+            <UserRound size={15} />
+          </button>
+          <button className="sidebar-signout" onClick={() => void signOut()}>
+            <LogOut size={14} /> Sign out
           </button>
         </div>
       </aside>
@@ -552,7 +560,13 @@ export default function App() {
             </button>
             <span className="top-divider" />
             <span className="top-date">{today}</span>
-            <span className="top-avatar">{initial(profile.full_name)}</span>
+            <button
+              className="top-avatar top-avatar-button"
+              aria-label="Open my profile settings"
+              onClick={() => setPage("My profile")}
+            >
+              {initial(profile.full_name)}
+            </button>
           </div>
         </header>
         <div className="page-content">
@@ -638,6 +652,17 @@ export default function App() {
           )}
           {page === "Team access" && (
             <Team orgId={profile.organizations[0]?.id} onNotice={setNotice} />
+          )}
+          {page === "My profile" && (
+            <ProfileSettings
+              profile={profile}
+              onProfileUpdate={(name) =>
+                setProfile((current) =>
+                  current ? { ...current, full_name: name } : current,
+                )
+              }
+              onNotice={setNotice}
+            />
           )}
           {page === "Review queue" && (
             <ReviewQueue
@@ -1542,6 +1567,183 @@ function Team({
           </table>
         </div>
       </article>
+    </>
+  );
+}
+
+function ProfileSettings({
+  profile,
+  onProfileUpdate,
+  onNotice,
+}: {
+  profile: Profile;
+  onProfileUpdate: (name: string) => void;
+  onNotice: (message: string) => void;
+}) {
+  const [name, setName] = useState(profile.full_name);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [savingName, setSavingName] = useState(false);
+  const [savingPassword, setSavingPassword] = useState(false);
+
+  async function saveName(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSavingName(true);
+    try {
+      const result = await send<{ full_name: string }>(
+        "/api/auth/me",
+        "PATCH",
+        {
+          full_name: name.trim(),
+        },
+      );
+      setName(result.full_name);
+      onProfileUpdate(result.full_name);
+      onNotice("Your profile name was updated.");
+    } catch (error) {
+      onNotice(
+        error instanceof Error
+          ? error.message
+          : "Could not update your profile.",
+      );
+    } finally {
+      setSavingName(false);
+    }
+  }
+
+  async function changePassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (newPassword !== confirmPassword) {
+      onNotice("The new password and confirmation do not match.");
+      return;
+    }
+    setSavingPassword(true);
+    try {
+      await send("/api/auth/me", "PATCH", {
+        current_password: currentPassword,
+        new_password: newPassword,
+      });
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      onNotice("Password changed. Other signed-in sessions were signed out.");
+    } catch (error) {
+      onNotice(
+        error instanceof Error
+          ? error.message
+          : "Could not change your password.",
+      );
+    } finally {
+      setSavingPassword(false);
+    }
+  }
+
+  return (
+    <>
+      <PageTitle
+        eyebrow="ACCOUNT SETTINGS"
+        title="My profile"
+        description="Update your display name and protect access to your account."
+      />
+      <div className="profile-settings-grid">
+        <article className="card profile-settings-card">
+          <div className="card-head">
+            <div>
+              <h2>Profile details</h2>
+              <p>
+                Your email is read-only in this demo because verified email
+                changes are not supported.
+              </p>
+            </div>
+          </div>
+          <form className="profile-form" onSubmit={saveName}>
+            <label>
+              Full name
+              <input
+                name="full_name"
+                autoComplete="name"
+                minLength={2}
+                maxLength={120}
+                required
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+              />
+            </label>
+            <label>
+              Email address
+              <input value={profile.email} readOnly aria-readonly="true" />
+            </label>
+            <button
+              className="button primary"
+              disabled={savingName || name.trim() === profile.full_name}
+            >
+              {savingName ? "Saving…" : "Save profile"}
+            </button>
+          </form>
+        </article>
+        <article className="card profile-settings-card">
+          <div className="card-head">
+            <div>
+              <h2>Change password</h2>
+              <p>
+                Use a long, unique passphrase. Changing it signs out your other
+                sessions.
+              </p>
+            </div>
+          </div>
+          <form className="profile-form" onSubmit={changePassword}>
+            <label>
+              Current password
+              <input
+                type="password"
+                autoComplete="current-password"
+                minLength={1}
+                maxLength={256}
+                required
+                value={currentPassword}
+                onChange={(event) => setCurrentPassword(event.target.value)}
+              />
+            </label>
+            <label>
+              New password
+              <input
+                type="password"
+                autoComplete="new-password"
+                minLength={15}
+                maxLength={256}
+                required
+                value={newPassword}
+                onChange={(event) => setNewPassword(event.target.value)}
+              />
+            </label>
+            <label>
+              Confirm new password
+              <input
+                type="password"
+                autoComplete="new-password"
+                minLength={15}
+                maxLength={256}
+                required
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+              />
+            </label>
+            <button className="button primary" disabled={savingPassword}>
+              {savingPassword ? "Changing…" : "Change password"}
+            </button>
+          </form>
+        </article>
+      </div>
+      <div className="page-hint">
+        <ShieldCheck size={16} />
+        <span>
+          Your account has {profile.organizations.length} organization
+          membership
+          {profile.organizations.length === 1 ? "" : "s"}. Access is controlled
+          by each organization's role.
+        </span>
+      </div>
     </>
   );
 }
@@ -2521,3 +2723,4 @@ function Empty({ message }: { message: string }) {
     </div>
   );
 }
+
