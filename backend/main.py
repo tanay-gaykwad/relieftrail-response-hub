@@ -93,10 +93,12 @@ def ensure_demo_user():
     with pool.connection() as conn:
         for email, full_name, password, role in demo_accounts:
             user = conn.execute("""INSERT INTO users(email,full_name,password_hash)
-                VALUES (%s,%s,%s) ON CONFLICT(email) DO UPDATE SET password_hash=excluded.password_hash,is_active=true RETURNING id""",
+                VALUES (%s,%s,%s) ON CONFLICT(email) DO NOTHING RETURNING id""",
                 (email,full_name,password_digest(password))).fetchone()
+            if not user:
+                user = conn.execute("SELECT id FROM users WHERE email=%s", (email,)).fetchone()
             conn.execute("""INSERT INTO organization_memberships(user_id,organization_id,role)
-                VALUES (%s,1,%s) ON CONFLICT(user_id,organization_id) DO UPDATE SET role=excluded.role""", (user["id"],role))
+                VALUES (%s,1,%s) ON CONFLICT(user_id,organization_id) DO NOTHING""", (user["id"],role))
 
 
 @app.middleware("http")
@@ -126,6 +128,18 @@ class LoginRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     email: str = Field(min_length=3, max_length=254)
     password: str = Field(min_length=1, max_length=256)
+
+
+class ProfileUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    full_name: str | None = Field(default=None, min_length=2, max_length=120)
+    current_password: str | None = Field(default=None, max_length=256)
+    new_password: str | None = Field(default=None, min_length=15, max_length=256)
+
+    @field_validator("full_name", mode="before")
+    @classmethod
+    def trim_profile_name(cls, value):
+        return value.strip() if isinstance(value, str) else value
 
 
 class ResponseCreate(BaseModel):
@@ -369,6 +383,56 @@ def me(user: dict = Depends(current_user)):
     organizations = rows("""SELECT o.id,o.name,o.kind,m.role FROM organization_memberships m
         JOIN organizations o ON o.id=m.organization_id WHERE m.user_id=%s ORDER BY o.name""", (user["id"],))
     return {"full_name": user["full_name"], "email": user["email"], "organizations": organizations}
+
+
+@app.patch("/api/auth/me")
+def update_my_profile(payload: ProfileUpdate, response: FastAPIResponse,
+                      user: dict = Depends(current_user)):
+    """Allow a signed-in user to change their display name or password."""
+    updates = payload.model_dump(exclude_unset=True)
+    if not updates:
+        raise HTTPException(status_code=422, detail="Provide a name or password change.")
+    if "full_name" in updates and not updates["full_name"]:
+        raise HTTPException(status_code=422, detail="Name cannot be blank.")
+    changing_password = payload.new_password is not None
+    if changing_password != (payload.current_password is not None):
+        raise HTTPException(status_code=422, detail="Enter both your current password and a new password.")
+
+    changed_fields = []
+    with pool.connection() as conn:
+        if changing_password:
+            saved = conn.execute("SELECT password_hash FROM users WHERE id=%s AND is_active=true FOR UPDATE",
+                                 (user["id"],)).fetchone()
+            if not saved or not password_matches(payload.current_password, saved["password_hash"]):
+                raise HTTPException(status_code=403, detail="Your current password is incorrect.")
+        if "full_name" in updates:
+            conn.execute("UPDATE users SET full_name=%s WHERE id=%s", (updates["full_name"], user["id"]))
+            changed_fields.append("full_name")
+        if changing_password:
+            conn.execute("UPDATE users SET password_hash=%s WHERE id=%s",
+                          (password_digest(payload.new_password), user["id"]))
+            # Revoke every existing session after a credential change, then keep
+            # this browser signed in with a freshly rotated session identifier.
+            conn.execute("UPDATE user_sessions SET revoked_at=now() WHERE user_id=%s AND revoked_at IS NULL", (user["id"],))
+            session_token = secrets.token_urlsafe(32)
+            session_hash = hashlib.sha256(session_token.encode()).hexdigest()
+            expires_at = datetime.now(timezone.utc) + timedelta(hours=8)
+            conn.execute("INSERT INTO user_sessions(user_id,token_hash,expires_at) VALUES (%s,%s,%s)",
+                         (user["id"], session_hash, expires_at))
+            csrf_token = secrets.token_urlsafe(32)
+            response.set_cookie(SESSION_COOKIE, session_token, max_age=8*60*60, httponly=True,
+                                secure=COOKIE_SECURE, samesite="strict", path="/")
+            response.set_cookie("rt_csrf", csrf_token, max_age=8*60*60, httponly=False,
+                                secure=COOKIE_SECURE, samesite="strict", path="/")
+            changed_fields.append("password")
+        for membership in conn.execute(
+            "SELECT organization_id FROM organization_memberships WHERE user_id=%s", (user["id"],)
+        ).fetchall():
+            audit(conn, user, membership["organization_id"], "profile_updated", "user", user["id"],
+                  {"changed_fields": changed_fields})
+
+    return {"full_name": updates.get("full_name", user["full_name"]),
+            "email": user["email"], "password_changed": changing_password}
 
 
 @app.get("/api/organizations")
@@ -695,3 +759,4 @@ def resolve_issue(issue_id: int, user: dict = Depends(current_user)):
 @app.get("/api/audit")
 def audit_history(user: dict = Depends(current_user)):
     return rows("SELECT id,action,entity_type,entity_id,actor_label,details,created_at FROM audit_events WHERE organization_id=ANY(%s) ORDER BY created_at DESC LIMIT 30", (list(user["memberships"]),))
+

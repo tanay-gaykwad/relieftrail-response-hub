@@ -29,6 +29,7 @@ The frontend is a workflow interface; PostgreSQL remains the source of truth. Th
 4. The editor records a disbursement against a chosen allocation. The API validates amount, date, role, tenant, response and award status. A PostgreSQL trigger rechecks the remaining allocation inside the transaction.
 5. An editor submits a report summary. A reviewer or administrator accepts it or returns it for revision.
 6. Each supported operation writes an organization-scoped audit event in the same transaction as the change.
+7. A user can change their display name or password from account settings. Password changes check the current password, revoke existing sessions, and rotate the current browser session.
 
 CSV import validates the full file before writing. Accepted rows are inserted with deduplication in a single transaction; invalid files do not partially import.
 
@@ -36,6 +37,7 @@ CSV import validates the full file before writing. Accepted rows are inserted wi
 
 - **Server-side authorization:** the UI hides controls for convenience, but every API handler checks the organization membership and role. Composite foreign keys prevent cross-organization award/allocation links.
 - **Cookie sessions:** opaque session identifiers can be revoked in the database. `HttpOnly` protects the session from ordinary JavaScript reads; CSRF checks protect state-changing requests. Production still requires TLS and correctly configured origins/secrets.
+- **Self-service credentials:** account changes are authenticated and CSRF-protected. The email address stays read-only because verified ownership, email delivery, and recovery flows are not implemented.
 - **Relational integrity:** currency and amount rules are represented in SQL constraints. Financial totals are derived from funding rows through a view rather than duplicated in a mutable summary column.
 - **Database transactions:** award creation includes the award, allocation, milestone, and audit event together. A failed step rolls back the whole change.
 - **Audit trail:** application actions append events. A trigger blocks normal update/delete operations; database owners can still alter the database, so this is not tamper-proof evidence.
@@ -51,3 +53,4 @@ The Compose credentials, seeded users, fake records, and local database are for 
 - Database schema and sample data: [`../database/schema.sql`](../database/schema.sql), [`../database/seed.sql`](../database/seed.sql)
 - Frontend: [`../frontend/src/App.tsx`](../frontend/src/App.tsx)
 - Local startup: [`LOCAL_SETUP.md`](LOCAL_SETUP.md)
+

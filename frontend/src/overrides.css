@@ -178,6 +178,84 @@
   background: #f5f7f4;
   border-radius: 7px;
 }
+.sidebar-signout {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 8px 0 0 44px;
+  padding: 5px 7px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #77847a;
+  font-size: 10px;
+}
+.sidebar-signout:hover {
+  background: #f5f7f4;
+  color: #a34135;
+}
+.top-avatar-button {
+  padding: 0;
+  border: 0;
+  cursor: pointer;
+}
+.top-avatar-button:hover {
+  box-shadow: 0 0 0 3px #e7f2e9;
+}
+.profile-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.profile-settings-card {
+  padding: 17px;
+}
+.profile-settings-card .card-head {
+  margin-bottom: 15px;
+}
+.profile-settings-card .card-head h2 {
+  font-size: 14px;
+}
+.profile-settings-card .card-head p {
+  max-width: 470px;
+  line-height: 1.55;
+}
+.profile-form {
+  display: grid;
+  gap: 13px;
+}
+.profile-form label {
+  display: grid;
+  gap: 6px;
+  color: #536157;
+  font-size: 11px;
+  font-weight: 600;
+}
+.profile-form input {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid #dfe5df;
+  border-radius: 7px;
+  color: #26372e;
+  background: #fff;
+}
+.profile-form input[readonly] {
+  color: #77847a;
+  background: #f6f8f5;
+}
+.profile-form .button {
+  justify-self: start;
+}
+.profile-form .button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+@media (max-width: 900px) {
+  .profile-settings-grid {
+    grid-template-columns: 1fr;
+  }
+}
 @media (max-width: 760px) {
   .signin-screen {
     display: block;
@@ -209,3 +287,4 @@
   background: #fff7f5;
   color: #a34135;
 }
+

@@ -11,13 +11,14 @@ ResponseHub is an educational portfolio application that uses fictional records.
 - Write requests require a double-submit CSRF token. The API allows credentials only from configured frontend origins.
 - Login failures are throttled by an HMAC of normalized email and client address; raw addresses are not stored in the throttle table.
 - Every protected request checks that the account remains active and reloads organization memberships. API handlers enforce roles and tenant scope.
+- Users can update their own display name. Password changes require the current password, hash with Argon2id, rotate the current session, and revoke all other active sessions. Demo-account setup only inserts missing accounts; it no longer overwrites changed credentials or roles on API restart.
 - Prepared SQL parameters are used for user-supplied values. CSV input is size/row limited, validated as a whole, then written in one transaction.
 - PostgreSQL constraints, composite foreign keys, and triggers enforce organization boundaries, append-only audit events, award allocation limits, and spending ceilings.
 - Production mode refuses a missing or placeholder secret, uses secure cookie attributes, enables HSTS, and disables interactive API documentation.
 
 ## Important limits
 
-This repository has no MFA, account invitation or recovery workflow, password reset, managed identity provider, independent security audit, threat-model sign-off, backup/restore exercise, incident response process, or production monitoring. The demo accounts and passwords are public in the repository by design. Do not deploy with them. The local Compose configuration is intentionally for a local demonstration.
+This repository has no MFA, account invitation or recovery workflow, verified email changes, managed identity provider, independent security audit, threat-model sign-off, backup/restore exercise, incident response process, or production monitoring. The demo accounts and passwords are public in the repository by design. Do not deploy with them. The local Compose configuration is intentionally for a local demonstration.
 
 The demo password throttle is database-backed and suitable only for a small demonstration. A public service should use a reviewed rate-limiting strategy, alerting, operational controls, and abuse testing. Browser and database tests in CI do not replace penetration testing or a privacy/legal review.
 
@@ -32,3 +33,4 @@ The demo password throttle is database-backed and suitable only for a small demo
 ## Reporting a concern
 
 Please do not include real personal data in public issues. Contact the repository owner through the GitHub profile with a concise description and reproduction steps. This is a portfolio project and does not promise a monitored security response service.
+

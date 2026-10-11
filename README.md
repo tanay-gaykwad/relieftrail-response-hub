@@ -13,11 +13,12 @@ This is a separate follow-on project to [ReliefTrail's earlier contract prototyp
 - Create an award for an approved response, record its donor restrictions and budget line, and track spending against that line.
 - Submit a report against a donor deadline; reviewers can accept it or return it for changes.
 - Let administrators update the roles of existing team accounts. Demo accounts demonstrate admin, editor, reviewer, and viewer access.
+- Let users update their display name and change their password from account settings. Password changes require the current password, require 15 characters, and revoke other active sessions.
 - Import a CSV after full-file validation; accepted rows are committed together, duplicates are skipped, and the file is processed in memory only.
 - Search and export the fictional funding records.
 - Resolve a reconciliation flag and see who performed the action in the activity history.
 
-The API uses Argon2id password hashes, server-side revocable sessions in HttpOnly cookies, CSRF checks for write requests, login throttling, exact CORS origins, and security headers. Sessions expire after eight hours. Each request re-reads active account and organization membership from the database. Users have one of four roles: `org_admin`, `editor`, `reviewer`, or `viewer`. Response and award edits require an editor or administrator; only admins can approve or close a response; report review and reconciliation resolution require a reviewer or administrator. PostgreSQL triggers keep audit events append-only and reject award-budget overspend.
+The API uses Argon2id password hashes, server-side revocable sessions in HttpOnly cookies, CSRF checks for write requests, login throttling, exact CORS origins, and security headers. Sessions expire after eight hours. Each request re-reads active account and organization membership from the database. Users have one of four roles: `org_admin`, `editor`, `reviewer`, or `viewer`. Response and award edits require an editor or administrator; only admins can approve or close a response; report review and reconciliation resolution require a reviewer or administrator. PostgreSQL triggers keep audit events append-only and reject award-budget overspend. Demo-account setup is idempotent, so an API restart will not reset changed passwords or roles.
 
 This remains an educational demo, not a product cleared for real NGO use. It does not include MFA, invited-account onboarding or password recovery, a formal security review, tested backups, a managed identity provider, or deployment hardening. Do not store real donor, beneficiary, bank, or payment information.
 
@@ -35,7 +36,7 @@ This repository currently includes an illustrative interface preview, not a scre
 
 ## Demo walkthrough
 
-Sign in as the demo administrator, review a response, inspect its award and allocations, and record a sample disbursement. Then open the reporting calendar to submit a short summary and sign in as the reviewer to accept it. Finally, try a write action as the viewer; the API should deny it. All examples use fictional records and local test data.
+Sign in as the demo administrator, review a response, inspect its award and allocations, and record a sample disbursement. Use the account panel to update the display name or change the password; other signed-in sessions are revoked after a password change. Then open the reporting calendar to submit a short summary and sign in as the reviewer to accept it. Finally, try a write action as the viewer; the API should deny it. All examples use fictional records and local test data.
 
 ## Project status
 
@@ -113,6 +114,7 @@ SECURITY.md        Security design, limitations, and reporting guidance
 - Local setup: [`docs/LOCAL_SETUP.md`](docs/LOCAL_SETUP.md)
 - Security notes: [`SECURITY.md`](SECURITY.md)
 - Architecture: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- Product and engineering review: [`docs/PRODUCT_REVIEW.md`](docs/PRODUCT_REVIEW.md)
 - Product scope and demo flow: [`docs/PRODUCT_SCOPE.md`](docs/PRODUCT_SCOPE.md)
 - Course report: [`output/pdf/relieftrail-funding-workspace-report.pdf`](output/pdf/relieftrail-funding-workspace-report.pdf)
 - Interface preview: [`screenshots/dashboard-interface-preview.png`](screenshots/dashboard-interface-preview.png) (illustrative; capture a live database-backed screen after local startup)
