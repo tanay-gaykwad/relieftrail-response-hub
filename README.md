@@ -28,11 +28,35 @@ The workflow is informed by public feature descriptions for established grant pl
 
 Security choices use OWASP guidance for adaptive password hashing, session handling, and deny-by-default access checks: [Password Storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html), [Session Management](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html), and [Authorization](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html). Details and remaining gaps are in [`SECURITY.md`](SECURITY.md).
 
-## Interface preview
+## Interface screenshots
 
-![Illustrative ResponseHub dashboard preview](screenshots/dashboard-interface-preview.png)
+These six screenshots were provided from the locally running demo and use fictional sample data. They show the interface and workflow; they do not imply that a public live deployment or production service is available.
 
-This repository currently includes an illustrative interface preview, not a screenshot captured from a live database-backed deployment. See [screenshots/README.md](screenshots/README.md) for that distinction and the steps to replace it with verified captures.
+### Responses
+
+![Responses list](screenshots/responses.png)
+
+### Awards and budgets
+
+![Awards and budget tracking](screenshots/awards-and-budgets.png)
+
+### Reporting calendar
+
+![Reporting calendar](screenshots/reporting-calendar.png)
+
+### Funding records
+
+![Funding records](screenshots/funding-records.png)
+
+### Review queue
+
+![Review queue](screenshots/review-queue.png)
+
+### Activity log
+
+![Activity log](screenshots/activity-log.png)
+
+The separate [dashboard concept preview](screenshots/dashboard-interface-preview.png) is illustrative rather than a capture from the running application. See [screenshots/README.md](screenshots/README.md) for details.
 
 ## Demo walkthrough
 
@@ -117,7 +141,7 @@ SECURITY.md        Security design, limitations, and reporting guidance
 - Product and engineering review: [`docs/PRODUCT_REVIEW.md`](docs/PRODUCT_REVIEW.md)
 - Product scope and demo flow: [`docs/PRODUCT_SCOPE.md`](docs/PRODUCT_SCOPE.md)
 - Course report: [`output/pdf/relieftrail-funding-workspace-report.pdf`](output/pdf/relieftrail-funding-workspace-report.pdf)
-- Interface preview: [`screenshots/dashboard-interface-preview.png`](screenshots/dashboard-interface-preview.png) (illustrative; capture a live database-backed screen after local startup)
+- Interface screenshots: [`screenshots/`](screenshots/) (local demo captures with fictional sample data)
 - Portfolio landing page source: [`portfolio-site/`](portfolio-site/)
 
 ## Roadmap

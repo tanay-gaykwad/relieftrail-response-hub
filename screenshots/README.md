@@ -1,12 +1,14 @@
 # Screenshots
 
-`dashboard-interface-preview.png` is an illustrative concept image. It is not captured from a running build and should not be presented as proof of a deployed or database-connected application.
+The six workflow captures in this folder were provided by the project owner from the locally running ResponseHub demo. They use fictional sample data and show the interface at one point in time; they do not prove a public deployment, production readiness, real donations, or delivery of aid.
 
-After starting the local stack, replace or supplement it with screenshots from the actual interface. Use fictional seeded data only. Recommended captures:
+- [Responses](responses.png)
+- [Awards and budgets](awards-and-budgets.png)
+- [Reporting calendar](reporting-calendar.png)
+- [Funding records](funding-records.png)
+- [Review queue](review-queue.png)
+- [Activity log](activity-log.png)
 
-1. Overview with sample portfolio figures.
-2. Awards and budget allocation list.
-3. Reporting deadline and reviewer workflow.
-4. Team access view with a demo role.
+`dashboard-interface-preview.png` is a separate illustrative concept image, not a screenshot of the running app.
 
-Do not include real account details, personal data, credentials, or sensitive operational information in published screenshots.
+Published screenshots must not contain real account details, personal data, credentials, or sensitive operational information.
