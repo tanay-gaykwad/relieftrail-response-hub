@@ -3,7 +3,7 @@
 ## Requirements
 
 - Docker Desktop with Docker Compose
-- Node.js 20 or newer and pnpm
+- Node.js 22 or newer and pnpm
 - Python 3.12 or newer for running backend tests outside Docker
 
 ## Start from a fresh clone

@@ -58,7 +58,7 @@ Relief organizations need to connect restricted funding to approved work, author
 
 ## Run locally
 
-Requirements: Docker Desktop with Compose, Node.js 20+, and pnpm.
+Requirements: Docker Desktop with Compose, Node.js 22+, and pnpm.
 
 1. (Optional) Copy `.env.example` to `.env` to change local demo settings. Never commit `.env`.
 2. Start PostgreSQL, the API, and the frontend container from this folder:
