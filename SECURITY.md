@@ -12,9 +12,10 @@ ResponseHub is an educational portfolio application that uses fictional records.
 - Login failures are throttled by an HMAC of normalized email and client address; raw addresses are not stored in the throttle table.
 - Every protected request checks that the account remains active and reloads organization memberships. API handlers enforce roles and tenant scope.
 - Users can update their own display name. Password changes require the current password, hash with Argon2id, rotate the current session, and revoke all other active sessions. Demo-account setup only inserts missing accounts; it no longer overwrites changed credentials or roles on API restart.
-- Prepared SQL parameters are used for user-supplied values. CSV input is size/row limited, validated as a whole, then written in one transaction.
+- The API connects with a dedicated non-superuser PostgreSQL role. Compose provisions its table/sequence grants separately from the database bootstrap account; local database and API ports bind to loopback.
+- Prepared SQL parameters are used for user-supplied values. CSV input is size/row limited, validated as a whole, then written in one transaction. Imported disbursements must match an active award allocation for an approved response, fall within the award period, and pass the same database budget trigger as manual disbursements.
 - PostgreSQL constraints, composite foreign keys, and triggers enforce organization boundaries, append-only audit events, award allocation limits, and spending ceilings.
-- Production mode refuses a missing or placeholder secret, uses secure cookie attributes, enables HSTS, and disables interactive API documentation.
+- Production mode refuses missing/placeholder app and database passwords, non-HTTPS frontend origins, and seeded demo accounts; it uses secure cookie attributes, enables HSTS, and disables interactive API documentation.
 
 ## Important limits
 
