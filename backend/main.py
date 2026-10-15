@@ -466,7 +466,9 @@ def update_team_role(member_id: int, organization_id: int, payload: RoleUpdate, 
 
 
 @app.get("/api/awards")
-def awards(user: dict = Depends(current_user)):
+def awards(organization_id: int | None = None, user: dict = Depends(current_user)):
+    if organization_id is not None:
+        require_org(user, organization_id)
     return rows("""SELECT a.id,a.organization_id,a.award_code,a.title,f.name AS funder_name,a.total_amount,a.currency,
         a.start_date,a.end_date,a.restricted_purpose,a.status,
         coalesce((SELECT sum(al.budget_amount) FROM award_allocations al WHERE al.award_id=a.id),0) AS allocated_amount,
@@ -477,7 +479,8 @@ def awards(user: dict = Depends(current_user)):
         (SELECT count(*) FROM reporting_milestones rm WHERE rm.award_id=a.id AND rm.status IN ('upcoming','needs_revision')) AS reports_due
         FROM funding_awards a JOIN funders f ON f.id=a.funder_id
         JOIN organization_memberships m ON m.organization_id=a.organization_id AND m.user_id=%s
-        ORDER BY a.start_date DESC,a.id DESC""", (user["id"],))
+        WHERE (%s::bigint IS NULL OR a.organization_id=%s)
+        ORDER BY a.start_date DESC,a.id DESC""", (user["id"], organization_id, organization_id))
 
 
 @app.post("/api/awards", status_code=201)
@@ -509,14 +512,17 @@ def create_award(payload: AwardCreate, user: dict = Depends(current_user)):
 
 
 @app.get("/api/reporting-calendar")
-def reporting_calendar(user: dict = Depends(current_user)):
+def reporting_calendar(organization_id: int | None = None, user: dict = Depends(current_user)):
+    if organization_id is not None:
+        require_org(user, organization_id)
     return rows("""SELECT rm.id,rm.award_id,rm.period_start,rm.period_end,rm.due_date,rm.report_type,rm.status,rm.summary,rm.submitted_at,
         a.award_code,a.title AS award_title,f.name AS funder_name,
         (SELECT coalesce(sum(fr.amount),0) FROM funding_records fr JOIN award_allocations al ON al.id=fr.award_allocation_id
          WHERE al.award_id=a.id AND fr.record_type='disbursement') AS disbursed_amount
         FROM reporting_milestones rm JOIN funding_awards a ON a.id=rm.award_id JOIN funders f ON f.id=a.funder_id
         JOIN organization_memberships m ON m.organization_id=rm.organization_id AND m.user_id=%s
-        ORDER BY rm.due_date,rm.id""", (user["id"],))
+        WHERE (%s::bigint IS NULL OR rm.organization_id=%s)
+        ORDER BY rm.due_date,rm.id""", (user["id"], organization_id, organization_id))
 
 
 @app.patch("/api/reporting-calendar/{milestone_id}")
@@ -581,8 +587,10 @@ def record_disbursement(payload: DisbursementCreate, user: dict = Depends(curren
 
 
 @app.get("/api/dashboard")
-def dashboard(user: dict = Depends(current_user)):
-    org_ids = list(user["memberships"])
+def dashboard(organization_id: int | None = None, user: dict = Depends(current_user)):
+    if organization_id is not None:
+        require_org(user, organization_id)
+    org_ids = [organization_id] if organization_id is not None else list(user["memberships"])
     summary = rows("""SELECT count(DISTINCT r.id) FILTER (WHERE r.status='approved') AS active_responses,
         count(DISTINCT r.id) AS response_count,
         coalesce(sum(f.amount) FILTER (WHERE f.record_type='contribution'),0) AS contributed,
@@ -606,13 +614,16 @@ def dashboard(user: dict = Depends(current_user)):
 
 
 @app.get("/api/responses")
-def list_responses(user: dict = Depends(current_user)):
+def list_responses(organization_id: int | None = None, user: dict = Depends(current_user)):
+    if organization_id is not None:
+        require_org(user, organization_id)
     return rows("""SELECT r.id,r.code,r.title,r.location,r.summary,r.status,r.start_date,o.name AS organization_name,
         coalesce((SELECT sum(f.amount) FROM funding_records f WHERE f.response_id=r.id AND f.record_type='contribution'),0) AS contributed,
         coalesce((SELECT sum(f.amount) FROM funding_records f WHERE f.response_id=r.id AND f.record_type='disbursement'),0) AS disbursed,
         (SELECT count(*) FROM reconciliation_issues i WHERE i.response_id=r.id AND i.status='open') AS open_issues
         FROM responses r JOIN organizations o ON o.id=r.organization_id
-        JOIN organization_memberships m ON m.organization_id=o.id AND m.user_id=%s ORDER BY r.created_at DESC""", (user["id"],))
+        JOIN organization_memberships m ON m.organization_id=o.id AND m.user_id=%s
+        WHERE (%s::bigint IS NULL OR r.organization_id=%s) ORDER BY r.created_at DESC""", (user["id"], organization_id, organization_id))
 
 
 @app.post("/api/responses", status_code=201)
@@ -674,9 +685,13 @@ def delete_response(response_id: int, user: dict = Depends(current_user)):
 
 
 @app.get("/api/funding-records")
-def funding_records(record_type: Literal["contribution", "disbursement"] | None = None, user: dict = Depends(current_user)):
+def funding_records(record_type: Literal["contribution", "disbursement"] | None = None,
+                    organization_id: int | None = None, user: dict = Depends(current_user)):
+    if organization_id is not None:
+        require_org(user, organization_id)
     condition = "AND f.record_type=%s" if record_type else ""
-    params = (list(user["memberships"]), record_type) if record_type else (list(user["memberships"]),)
+    org_ids = [organization_id] if organization_id is not None else list(user["memberships"])
+    params = (org_ids, record_type) if record_type else (org_ids,)
     return rows(f"""SELECT f.id,f.record_type,f.amount,f.currency,f.recorded_on,f.reference,f.description,f.source_reference,
         r.code AS response_code,r.title AS response_title,s.name AS source_name,
         count(i.id) FILTER (WHERE i.status='open') AS open_issues
@@ -686,7 +701,8 @@ def funding_records(record_type: Literal["contribution", "disbursement"] | None 
 
 
 @app.post("/api/imports/csv", status_code=201)
-async def import_csv(file: UploadFile = File(...), user: dict = Depends(current_user)):
+async def import_csv(file: UploadFile = File(...), organization_id: int | None = None,
+                     user: dict = Depends(current_user)):
     """Validate the full file in memory, then write it as one database transaction."""
     safe_name = (file.filename or "funding.csv").replace("\\", "/").split("/")[-1][:120]
     if not safe_name.lower().endswith(".csv"):
@@ -702,7 +718,10 @@ async def import_csv(file: UploadFile = File(...), user: dict = Depends(current_
     imported = skipped = 0
     with pool.connection() as conn:
         codes = list({entry[1] for entry in parsed})
-        responses = conn.execute("SELECT id,code,organization_id FROM responses WHERE code=ANY(%s)", (codes,)).fetchall()
+        if organization_id is not None:
+            require_org(user, organization_id, ("org_admin", "editor"))
+        responses = conn.execute("SELECT id,code,organization_id FROM responses WHERE code=ANY(%s) AND (%s::bigint IS NULL OR organization_id=%s)",
+                                 (codes, organization_id, organization_id)).fetchall()
         by_code = {row["code"]: row for row in responses}
         unknown = [code for code in codes if code not in by_code]
         if unknown:
@@ -730,16 +749,21 @@ async def import_csv(file: UploadFile = File(...), user: dict = Depends(current_
 
 
 @app.get("/api/imports")
-def import_history(user: dict = Depends(current_user)):
-    return rows("SELECT id,source_name,file_name,rows_received,rows_imported,rows_skipped,status,created_at FROM import_batches WHERE organization_id=ANY(%s) ORDER BY created_at DESC LIMIT 30", (list(user["memberships"]),))
+def import_history(organization_id: int | None = None, user: dict = Depends(current_user)):
+    if organization_id is not None:
+        require_org(user, organization_id)
+    org_ids = [organization_id] if organization_id is not None else list(user["memberships"])
+    return rows("SELECT id,source_name,file_name,rows_received,rows_imported,rows_skipped,status,created_at FROM import_batches WHERE organization_id=ANY(%s) ORDER BY created_at DESC LIMIT 30", (org_ids,))
 
 
 @app.get("/api/issues")
-def issues(user: dict = Depends(current_user)):
+def issues(organization_id: int | None = None, user: dict = Depends(current_user)):
+    if organization_id is not None:
+        require_org(user, organization_id)
     return rows("""SELECT i.id,i.issue_type,i.description,i.status,i.created_at,r.code AS response_code,
         f.reference,f.amount,f.currency FROM reconciliation_issues i JOIN responses r ON r.id=i.response_id
         LEFT JOIN funding_records f ON f.id=i.funding_record_id JOIN organization_memberships m ON m.organization_id=r.organization_id AND m.user_id=%s
-        ORDER BY i.created_at DESC""", (user["id"],))
+        WHERE (%s::bigint IS NULL OR r.organization_id=%s) ORDER BY i.created_at DESC""", (user["id"], organization_id, organization_id))
 
 
 @app.patch("/api/issues/{issue_id}/resolve")
@@ -757,6 +781,8 @@ def resolve_issue(issue_id: int, user: dict = Depends(current_user)):
 
 
 @app.get("/api/audit")
-def audit_history(user: dict = Depends(current_user)):
-    return rows("SELECT id,action,entity_type,entity_id,actor_label,details,created_at FROM audit_events WHERE organization_id=ANY(%s) ORDER BY created_at DESC LIMIT 30", (list(user["memberships"]),))
-
+def audit_history(organization_id: int | None = None, user: dict = Depends(current_user)):
+    if organization_id is not None:
+        require_org(user, organization_id)
+    org_ids = [organization_id] if organization_id is not None else list(user["memberships"])
+    return rows("SELECT id,action,entity_type,entity_id,actor_label,details,created_at FROM audit_events WHERE organization_id=ANY(%s) ORDER BY created_at DESC LIMIT 30", (org_ids,))
