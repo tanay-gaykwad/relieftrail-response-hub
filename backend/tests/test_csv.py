@@ -32,6 +32,19 @@ def test_csv_parser_rejects_invalid_rows(row):
         parse_funding_csv(payload)
 
 
+def test_csv_parser_requires_budget_mapping_for_disbursements():
+    header = "response_code,record_type,amount,currency,recorded_on,reference,source_reference\\n"
+    row = "FLOOD-26-01,disbursement,5,USD,2026-10-01,Ref-1,source-1\\n"
+    with pytest.raises(ValueError, match="award_code and allocation_category"):
+        parse_funding_csv((header + row).encode())
+
+    mapped = parse_funding_csv(
+        b"response_code,record_type,amount,currency,recorded_on,reference,source_reference,award_code,allocation_category\\n"
+        b"FLOOD-26-01,disbursement,5,USD,2026-10-01,Ref-1,source-1,AWARD-01,Shelter\\n"
+    )
+    assert mapped[0][-2:] == ("AWARD-01", "Shelter")
+
+
 def test_csv_parser_rejects_missing_columns_and_non_utf8():
     with pytest.raises(ValueError, match="needs"):
         parse_funding_csv(b"response_code,amount\nFLOOD-26-01,10\n")
@@ -71,14 +84,16 @@ def test_csv_import_skips_duplicates_and_records_one_batch(monkeypatch):
             class Connection:
                 def execute(self, sql, params=()):
                     if "SELECT id,code,organization_id FROM responses" in sql:
-                        return Result([{"id": 3, "code": "FLOOD-26-01", "organization_id": 1}])
+                        return Result([{"id": 3, "code": "FLOOD-26-01", "organization_id": 1, "status": "approved"}])
                     if "INSERT INTO import_batches" in sql:
                         return Result([{"id": 12}])
                     if "SELECT id FROM funding_sources" in sql:
                         return Result([{"id": 2}])
+                    if "SELECT 1 FROM funding_records" in sql:
+                        return Result([{}] if params[2] in database.inserted else [])
                     if "INSERT INTO funding_records" in sql:
                         database.insert_calls += 1
-                        source_ref = params[9]
+                        source_ref = params[10]
                         if source_ref in database.inserted:
                             return Result()
                         database.inserted.add(source_ref)
