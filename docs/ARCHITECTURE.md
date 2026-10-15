@@ -19,6 +19,7 @@ The frontend is a workflow interface; PostgreSQL remains the source of truth. Th
 - **React + TypeScript:** portfolio dashboard, response records, award budgets, reports, review queue, and activity views. Browser requests include credentials and a CSRF header. Session secrets are not stored in web storage.
 - **FastAPI:** request validation, authentication, CSV parsing, tenant scoping, role-based authorization, and transaction orchestration.
 - **PostgreSQL:** normalized organizations, users, memberships, sessions, responses, funders, awards, allocations, milestones, funding records, issues, imports, and audit events.
+- **Organization context:** the interface selects one organization and includes its ID in scoped data requests. The API checks membership before filtering results; the selected ID is a filter, never proof of access.
 - **Docker Compose:** starts PostgreSQL and the API for a disposable local environment. Vite runs separately for development.
 
 ## Typical funding workflow
@@ -35,7 +36,7 @@ CSV import validates the full file before writing. Accepted rows are inserted wi
 
 ## Security boundaries and design choices
 
-- **Server-side authorization:** the UI hides controls for convenience, but every API handler checks the organization membership and role. Composite foreign keys prevent cross-organization award/allocation links.
+- **Server-side authorization:** the UI shows controls for the selected organization's role, but every API handler checks membership and required roles. Composite foreign keys prevent cross-organization award/allocation links.
 - **Cookie sessions:** opaque session identifiers can be revoked in the database. `HttpOnly` protects the session from ordinary JavaScript reads; CSRF checks protect state-changing requests. Production still requires TLS and correctly configured origins/secrets.
 - **Self-service credentials:** account changes are authenticated and CSRF-protected. The email address stays read-only because verified ownership, email delivery, and recovery flows are not implemented.
 - **Relational integrity:** currency and amount rules are represented in SQL constraints. Financial totals are derived from funding rows through a view rather than duplicated in a mutable summary column.
@@ -53,4 +54,3 @@ The Compose credentials, seeded users, fake records, and local database are for 
 - Database schema and sample data: [`../database/schema.sql`](../database/schema.sql), [`../database/seed.sql`](../database/seed.sql)
 - Frontend: [`../frontend/src/App.tsx`](../frontend/src/App.tsx)
 - Local startup: [`LOCAL_SETUP.md`](LOCAL_SETUP.md)
-
