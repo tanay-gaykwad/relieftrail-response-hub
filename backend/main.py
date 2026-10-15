@@ -22,11 +22,18 @@ from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 from psycopg.types.json import Jsonb
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://relieftrail:local_demo_only@localhost:5432/relieftrail")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://relieftrail_app:local-app-only-change-before-deployment@localhost:5432/relieftrail")
 APP_ENV = os.getenv("APP_ENV", "local").lower()
 APP_SECRET_KEY = os.getenv("APP_SECRET_KEY", "")
-if APP_ENV == "production" and (len(APP_SECRET_KEY) < 32 or "change-before" in APP_SECRET_KEY.lower()):
-    raise RuntimeError("Production requires APP_SECRET_KEY to be a unique secret of at least 32 characters.")
+APP_DB_PASSWORD = os.getenv("APP_DB_PASSWORD", "")
+ALLOWED_ORIGINS = [value.strip() for value in os.getenv("FRONTEND_ORIGINS", os.getenv("FRONTEND_ORIGIN", "http://localhost:5173,http://127.0.0.1:5173")).split(",") if value.strip()]
+if APP_ENV == "production":
+    if len(APP_SECRET_KEY) < 32 or "change-before" in APP_SECRET_KEY.lower() or "local-demo" in APP_SECRET_KEY.lower():
+        raise RuntimeError("Production requires a unique APP_SECRET_KEY of at least 32 characters.")
+    if len(APP_DB_PASSWORD) < 32 or "change-before" in APP_DB_PASSWORD.lower() or "local-app-only" in APP_DB_PASSWORD.lower():
+        raise RuntimeError("Production requires a unique APP_DB_PASSWORD of at least 32 characters.")
+    if not ALLOWED_ORIGINS or any(not origin.startswith("https://") for origin in ALLOWED_ORIGINS):
+        raise RuntimeError("Production FRONTEND_ORIGINS must contain HTTPS origins only.")
 DEMO_EMAIL = os.getenv("DEMO_EMAIL", "admin@relieftrail.test").strip().lower()
 DEMO_PASSWORD = os.getenv("DEMO_PASSWORD", "demo-change-me")
 SESSION_COOKIE = "__Host-relieftrail_session" if APP_ENV == "production" else "relieftrail_session"
@@ -39,6 +46,11 @@ password_hasher = PasswordHasher()
 async def lifespan(_app):
     pool.open(wait=True)
     try:
+        if APP_ENV == "production":
+            with pool.connection() as conn:
+                demo_accounts = conn.execute("SELECT EXISTS(SELECT 1 FROM users WHERE email LIKE %s OR email=%s) AS found", ("%@relieftrail.test", DEMO_EMAIL)).fetchone()["found"]
+            if demo_accounts:
+                raise RuntimeError("Production database contains demo accounts; remove them before startup.")
         ensure_demo_user()
         yield
     finally:
@@ -46,8 +58,7 @@ async def lifespan(_app):
 
 
 app = FastAPI(title="ReliefTrail ResponseHub", version="0.3.0", description="Organization-scoped relief awards, budgets, reporting, and reconciliation API.", docs_url=None if APP_ENV == "production" else "/docs", redoc_url=None if APP_ENV == "production" else "/redoc", lifespan=lifespan)
-allowed_origins = [value.strip() for value in os.getenv("FRONTEND_ORIGINS", os.getenv("FRONTEND_ORIGIN", "http://localhost:5173,http://127.0.0.1:5173")).split(",") if value.strip()]
-app.add_middleware(CORSMiddleware, allow_origins=allowed_origins, allow_credentials=True, allow_methods=["GET", "POST", "PATCH", "DELETE"], allow_headers=["Content-Type", "X-CSRF-Token"])
+app.add_middleware(CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_credentials=True, allow_methods=["GET", "POST", "PATCH", "DELETE"], allow_headers=["Content-Type", "X-CSRF-Token"])
 
 
 def password_digest(password: str) -> str:
@@ -287,14 +298,19 @@ def parse_funding_csv(content: bytes) -> list[tuple]:
     try:
         reader = csv.DictReader(io.StringIO(content.decode("utf-8-sig"), newline=""))
         required = {"response_code", "record_type", "amount", "currency", "recorded_on", "reference", "source_reference"}
-        if not required.issubset({name.strip().lower() for name in (reader.fieldnames or []) if name}):
+        headers = [name.strip().lower() for name in (reader.fieldnames or []) if name]
+        if not required.issubset(set(headers)):
             raise ValueError("CSV needs response_code, record_type, amount, currency, recorded_on, reference, and source_reference columns.")
+        if len(headers) != len(set(headers)):
+            raise ValueError("CSV column names must be unique.")
         if len(reader.fieldnames or []) > 30:
             raise ValueError("The CSV has too many columns.")
         parsed = []
         for line_number, raw in enumerate(reader, start=2):
             if line_number > 1002:
                 raise ValueError("A file can contain at most 1,000 data rows.")
+            if None in raw:
+                raise ValueError(f"Row {line_number}: the row has more values than the header.")
             row = {(key or "").strip().lower(): (value or "").strip() for key, value in raw.items()}
             if not any(row.values()):
                 continue
@@ -303,15 +319,21 @@ def parse_funding_csv(content: bytes) -> list[tuple]:
                 amount = Decimal(row["amount"])
                 currency, date_value = row["currency"].upper(), date.fromisoformat(row["recorded_on"])
                 reference, source_reference = row["reference"], row["source_reference"]
+                award_code = row.get("award_code", "").upper()
+                allocation_category = row.get("allocation_category", "")
             except (KeyError, ValueError, InvalidOperation, ArithmeticError) as exc:
                 raise ValueError(f"Row {line_number}: required values or date/amount format are invalid.") from exc
             if kind not in ("contribution", "disbursement") or not amount.is_finite() or amount <= 0 or amount.as_tuple().exponent < -2 or amount.adjusted() > 15:
                 raise ValueError(f"Row {line_number}: type must be contribution/disbursement and amount must be positive with at most two decimal places.")
             if currency != "USD" or len(reference) < 3 or len(reference) > 120 or not source_reference or len(source_reference) > 120:
                 raise ValueError(f"Row {line_number}: currency, reference, or source_reference is invalid.")
+            if kind == "disbursement" and (not award_code or not allocation_category):
+                raise ValueError(f"Row {line_number}: disbursements require award_code and allocation_category.")
+            if len(award_code) > 40 or len(allocation_category) > 80:
+                raise ValueError(f"Row {line_number}: award code or allocation category is too long.")
             if len(row.get("description") or "") > 1000:
                 raise ValueError(f"Row {line_number}: description must be 1,000 characters or fewer.")
-            parsed.append((line_number, code, kind, amount, currency, date_value, reference, source_reference, row.get("description") or None))
+            parsed.append((line_number, code, kind, amount, currency, date_value, reference, source_reference, row.get("description") or None, award_code, allocation_category))
         if not parsed:
             raise ValueError("The CSV contains no funding rows.")
         return parsed
@@ -720,7 +742,7 @@ async def import_csv(file: UploadFile = File(...), user: dict = Depends(current_
         codes = list({entry[1] for entry in parsed})
         if organization_id is not None:
             require_org(user, organization_id, ("org_admin", "editor"))
-        responses = conn.execute("SELECT id,code,organization_id FROM responses WHERE code=ANY(%s) AND (%s::bigint IS NULL OR organization_id=%s)",
+        responses = conn.execute("SELECT id,code,organization_id,status FROM responses WHERE code=ANY(%s) AND (%s::bigint IS NULL OR organization_id=%s)",
                                  (codes, organization_id, organization_id)).fetchall()
         by_code = {row["code"]: row for row in responses}
         unknown = [code for code in codes if code not in by_code]
@@ -734,10 +756,35 @@ async def import_csv(file: UploadFile = File(...), user: dict = Depends(current_
         batch = conn.execute("""INSERT INTO import_batches(organization_id,source_name,file_name,rows_received,rows_imported,rows_skipped,status)
             VALUES (%s,'CSV upload',%s,%s,0,0,'completed') RETURNING id""", (organization_id,safe_name,len(parsed))).fetchone()
         source = conn.execute("SELECT id FROM funding_sources WHERE source_type='csv_import' ORDER BY id LIMIT 1").fetchone()
-        for line,code,kind,amount,currency,recorded_on,reference,source_reference,description in parsed:
-            inserted = conn.execute("""INSERT INTO funding_records(response_id,source_id,import_batch_id,record_type,amount,currency,recorded_on,reference,description,source_reference)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT(response_id,source_id,source_reference) DO NOTHING RETURNING id""",
-                (by_code[code]["id"],source["id"],batch["id"],kind,amount,currency,recorded_on,reference,description,source_reference)).fetchone()
+        for line,code,kind,amount,currency,recorded_on,reference,source_reference,description,award_code,allocation_category in parsed:
+            response = by_code[code]
+            duplicate = conn.execute("SELECT 1 FROM funding_records WHERE response_id=%s AND source_id=%s AND source_reference=%s",
+                                     (response["id"],source["id"],source_reference)).fetchone()
+            if duplicate:
+                skipped += 1
+                continue
+            allocation_id = None
+            if kind == "disbursement":
+                if response["status"] != "approved":
+                    raise HTTPException(status_code=409, detail=f"Row {line}: disbursements require an approved response.")
+                allocation = conn.execute("""SELECT al.id,al.budget_amount,a.start_date,a.end_date
+                    FROM award_allocations al JOIN funding_awards a ON a.id=al.award_id
+                    WHERE al.response_id=%s AND al.organization_id=%s AND a.award_code=%s
+                      AND lower(trim(al.category))=lower(%s) AND a.status='active'
+                    FOR UPDATE OF al""",
+                    (response["id"],organization_id,award_code,allocation_category)).fetchone()
+                if not allocation:
+                    raise HTTPException(status_code=422, detail=f"Row {line}: award and allocation category do not match an active award for this response.")
+                if not allocation["start_date"] <= recorded_on <= allocation["end_date"]:
+                    raise HTTPException(status_code=422, detail=f"Row {line}: disbursement date must be within the award period.")
+                spent = conn.execute("""SELECT coalesce(sum(amount),0) AS total FROM funding_records
+                    WHERE award_allocation_id=%s AND record_type='disbursement'""", (allocation["id"],)).fetchone()["total"]
+                if spent + amount > allocation["budget_amount"]:
+                    raise HTTPException(status_code=409, detail=f"Row {line}: disbursement would exceed the approved budget line.")
+                allocation_id = allocation["id"]
+            inserted = conn.execute("""INSERT INTO funding_records(response_id,award_allocation_id,source_id,import_batch_id,record_type,amount,currency,recorded_on,reference,description,source_reference)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT(response_id,source_id,source_reference) DO NOTHING RETURNING id""",
+                (response["id"],allocation_id,source["id"],batch["id"],kind,amount,currency,recorded_on,reference,description,source_reference)).fetchone()
             if inserted:
                 imported += 1
             else:
