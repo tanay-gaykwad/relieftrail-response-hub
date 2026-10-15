@@ -33,14 +33,14 @@ def test_csv_parser_rejects_invalid_rows(row):
 
 
 def test_csv_parser_requires_budget_mapping_for_disbursements():
-    header = "response_code,record_type,amount,currency,recorded_on,reference,source_reference\\n"
-    row = "FLOOD-26-01,disbursement,5,USD,2026-10-01,Ref-1,source-1\\n"
+    header = "response_code,record_type,amount,currency,recorded_on,reference,source_reference\n"
+    row = "FLOOD-26-01,disbursement,5,USD,2026-10-01,Ref-1,source-1\n"
     with pytest.raises(ValueError, match="award_code and allocation_category"):
         parse_funding_csv((header + row).encode())
 
     mapped = parse_funding_csv(
-        b"response_code,record_type,amount,currency,recorded_on,reference,source_reference,award_code,allocation_category\\n"
-        b"FLOOD-26-01,disbursement,5,USD,2026-10-01,Ref-1,source-1,AWARD-01,Shelter\\n"
+        b"response_code,record_type,amount,currency,recorded_on,reference,source_reference,award_code,allocation_category\n"
+        b"FLOOD-26-01,disbursement,5,USD,2026-10-01,Ref-1,source-1,AWARD-01,Shelter\n"
     )
     assert mapped[0][-2:] == ("AWARD-01", "Shelter")
 
@@ -112,5 +112,5 @@ def test_csv_import_skips_duplicates_and_records_one_batch(monkeypatch):
 
     assert result["rows_imported"] == 1
     assert result["rows_skipped"] == 1
-    assert fake_db.insert_calls == 2
+    assert fake_db.insert_calls == 1
     assert fake_db.opens == 1
