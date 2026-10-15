@@ -90,6 +90,7 @@ select:focus-visible {
   color: #91a096;
 }
 .workspace-switch {
+  position: relative;
   height: 54px;
   border: 1px solid var(--line);
   border-radius: 9px;
@@ -98,6 +99,18 @@ select:focus-visible {
   gap: 9px;
   padding: 8px;
   margin-bottom: 29px;
+}
+.workspace-switch:focus-within {
+  outline: 2px solid #87b99b;
+  outline-offset: 2px;
+}
+.workspace-switch select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
 }
 .org-avatar,
 .profile-avatar,
