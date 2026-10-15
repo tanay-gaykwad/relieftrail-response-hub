@@ -83,7 +83,7 @@ def test_csv_import_skips_duplicates_and_records_one_batch(monkeypatch):
 
             class Connection:
                 def execute(self, sql, params=()):
-                    if "SELECT id,code,organization_id FROM responses" in sql:
+                    if "FROM responses WHERE code=ANY(%s)" in sql:
                         return Result([{"id": 3, "code": "FLOOD-26-01", "organization_id": 1, "status": "approved"}])
                     if "INSERT INTO import_batches" in sql:
                         return Result([{"id": 12}])
