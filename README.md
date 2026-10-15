@@ -9,10 +9,11 @@ This is a separate follow-on project to [ReliefTrail's earlier contract prototyp
 ## What you can do
 
 - View response and funding summaries, restricted awards, budget allocations, reporting deadlines, review flags, and recent activity.
+- Switch between organizations; dashboard totals, records, budgets, review items, reports, and activity are scoped to the selected organization.
 - Create and update response records. Editors can remove an empty draft; responses with funding or review history are protected.
 - Create an award for an approved response, record its donor restrictions and budget line, and track spending against that line.
 - Submit a report against a donor deadline; reviewers can accept it or return it for changes.
-- Let administrators update the roles of existing team accounts. Demo accounts demonstrate admin, editor, reviewer, and viewer access.
+- Let administrators update the roles of existing team accounts. Roles and editable actions follow the selected organization. Demo accounts demonstrate admin, editor, reviewer, and viewer access.
 - Let users update their display name and change their password from account settings. Password changes require the current password, require 15 characters, and revoke other active sessions.
 - Import a CSV after full-file validation; accepted rows are committed together, duplicates are skipped, and the file is processed in memory only.
 - Search and export the fictional funding records.

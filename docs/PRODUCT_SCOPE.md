@@ -15,6 +15,8 @@ ResponseHub models a small relief organization that needs to keep response activ
 
 Roles are scoped to an organization. The API performs the checks; hiding a button in the frontend does not grant or revoke access.
 
+The workspace selector chooses one active organization at a time. Lists, totals, reports, review items, activity, and CSV imports use that context. The server checks the user's membership before returning organization-scoped data.
+
 ## Workflow and success criteria
 
 1. Sign in as the demo administrator (`admin@relieftrail.test` / `demo-change-me`).
