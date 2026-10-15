@@ -12,11 +12,9 @@ import {
   Activity,
   ArrowDownLeft,
   ArrowUpRight,
-  Bell,
   BookOpenCheck,
   CalendarDays,
   ChevronDown,
-  CircleHelp,
   Download,
   FileClock,
   FileSpreadsheet,
@@ -100,7 +98,6 @@ type Dashboard = {
   monthly: { month: string; contributions: string; disbursements: string }[];
   recent_records: FundingRow[];
 };
-type Organization = { id: number; name: string; kind: string; role?: string };
 type Award = {
   id: number;
   organization_id: number;
@@ -228,7 +225,9 @@ export default function App() {
   const [responses, setResponses] = useState<ResponseRow[]>([]);
   const [funding, setFunding] = useState<FundingRow[]>([]);
   const [issues, setIssues] = useState<Issue[]>([]);
-  const [orgs, setOrgs] = useState<Organization[]>([]);
+  const [selectedOrganizationId, setSelectedOrganizationId] = useState<
+    number | null
+  >(null);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [modal, setModal] = useState(false);
@@ -236,28 +235,32 @@ export default function App() {
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
   const importRef = useRef<HTMLInputElement>(null);
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const [d, r, f, i, o] = await Promise.all([
-        get<Dashboard>("/api/dashboard"),
-        get<ResponseRow[]>("/api/responses"),
-        get<FundingRow[]>("/api/funding-records"),
-        get<Issue[]>("/api/issues"),
-        get<Organization[]>("/api/organizations"),
-      ]);
-      setDashboard(d);
-      setResponses(r);
-      setFunding(f);
-      setIssues(i);
-      setOrgs(o);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not reach the API");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const activeOrganizationRef = useRef<number | null>(null);
+  const refresh = useCallback(
+    async (organizationId = activeOrganizationRef.current) => {
+      if (!organizationId) return;
+      setLoading(true);
+      setError("");
+      try {
+        const scope = `?organization_id=${organizationId}`;
+        const [d, r, f, i] = await Promise.all([
+          get<Dashboard>(`/api/dashboard${scope}`),
+          get<ResponseRow[]>(`/api/responses${scope}`),
+          get<FundingRow[]>(`/api/funding-records${scope}`),
+          get<Issue[]>(`/api/issues${scope}`),
+        ]);
+        setDashboard(d);
+        setResponses(r);
+        setFunding(f);
+        setIssues(i);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Could not reach the API");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [],
+  );
   useEffect(() => {
     if (!session) {
       setProfile(null);
@@ -267,7 +270,22 @@ export default function App() {
     void get<Profile>("/api/auth/me")
       .then((data) => {
         setProfile(data);
-        return refresh();
+        const savedId = Number(
+          localStorage.getItem("relieftrail.activeOrganization"),
+        );
+        const nextId = data.organizations.some((org) => org.id === savedId)
+          ? savedId
+          : (data.organizations[0]?.id ?? null);
+        activeOrganizationRef.current = nextId;
+        setSelectedOrganizationId(nextId);
+        if (nextId) {
+          localStorage.setItem(
+            "relieftrail.activeOrganization",
+            String(nextId),
+          );
+          return refresh(nextId);
+        }
+        setLoading(false);
       })
       .catch((err) => {
         setSession(false);
@@ -305,13 +323,16 @@ export default function App() {
     const form = new FormData(e.currentTarget);
     try {
       if (editing) {
-        await send(`/api/responses/${editing.id}`, "PATCH", {
+        const changes: Record<string, FormDataEntryValue | null> = {
           title: form.get("title"),
           location: form.get("location"),
           summary: form.get("summary"),
-          status: form.get("status"),
           start_date: form.get("start_date") || null,
-        });
+        };
+        if (activeOrganization?.role === "org_admin") {
+          changes.status = form.get("status");
+        }
+        await send(`/api/responses/${editing.id}`, "PATCH", changes);
         setNotice("Response changes saved.");
       } else {
         await send("/api/responses", "POST", {
@@ -375,12 +396,15 @@ export default function App() {
     const body = new FormData();
     body.append("file", file);
     try {
-      const response = await fetch(`${API}/api/imports/csv`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "X-CSRF-Token": csrfToken() },
-        body,
-      });
+      const response = await fetch(
+        `${API}/api/imports/csv?organization_id=${selectedOrganizationId}`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "X-CSRF-Token": csrfToken() },
+          body,
+        },
+      );
       const data = await response.json();
       if (!response.ok)
         throw new Error(data.detail || "Could not import this file.");
@@ -436,14 +460,32 @@ export default function App() {
     URL.revokeObjectURL(url);
     setNotice("Demo records exported as an import-ready CSV.");
   }
-  const canEdit =
-    profile?.organizations.some(
-      (o) => o.role === "org_admin" || o.role === "editor",
-    ) ?? false;
-  const canReview =
-    profile?.organizations.some((o) =>
-      ["org_admin", "editor", "reviewer"].includes(o.role),
-    ) ?? false;
+  const activeOrganization = profile?.organizations.find(
+    (o) => o.id === selectedOrganizationId,
+  );
+  const canEdit = activeOrganization
+    ? ["org_admin", "editor"].includes(activeOrganization.role)
+    : false;
+  const canReview = activeOrganization
+    ? ["org_admin", "editor", "reviewer"].includes(activeOrganization.role)
+    : false;
+  function switchOrganization(organizationId: number) {
+    activeOrganizationRef.current = organizationId;
+    setSelectedOrganizationId(organizationId);
+    localStorage.setItem(
+      "relieftrail.activeOrganization",
+      String(organizationId),
+    );
+    setQuery("");
+    if (
+      page === "Team access" &&
+      profile?.organizations.find((o) => o.id === organizationId)?.role !==
+        "org_admin"
+    ) {
+      setPage("Overview");
+    }
+    void refresh(organizationId);
+  }
   const nav: { label: Page; icon: typeof LayoutDashboard; count?: number }[] = [
     { label: "Overview", icon: LayoutDashboard },
     { label: "Responses", icon: BookOpenCheck },
@@ -456,7 +498,7 @@ export default function App() {
       count: issues.filter((x) => x.status === "open").length,
     },
     { label: "Activity log", icon: FileClock },
-    ...(profile?.organizations.some((o) => o.role === "org_admin")
+    ...(activeOrganization?.role === "org_admin"
       ? [{ label: "Team access" as Page, icon: UsersRound }]
       : []),
   ];
@@ -478,19 +520,30 @@ export default function App() {
             relieftrail<span>RESPONSEHUB</span>
           </span>
         </a>
-        <div className="workspace-switch">
+        <label className="workspace-switch">
           <span className="org-avatar">
-            {initial(profile.organizations[0]?.name || "Demo")}
+            {initial(activeOrganization?.name || "Demo")}
           </span>
           <span className="org-copy">
-            <b>{profile.organizations[0]?.name || "Demo workspace"}</b>
+            <b>{activeOrganization?.name || "No organization access"}</b>
             <small>
-              {profile.organizations[0]?.role.replace("_", " ").toUpperCase() ||
+              {activeOrganization?.role.replace("_", " ").toUpperCase() ||
                 "MEMBER"}
             </small>
           </span>
           <ChevronDown size={15} />
-        </div>
+          <select
+            aria-label="Switch organization"
+            value={selectedOrganizationId ?? ""}
+            onChange={(event) => switchOrganization(Number(event.target.value))}
+          >
+            {profile.organizations.map((organization) => (
+              <option key={organization.id} value={organization.id}>
+                {organization.name}
+              </option>
+            ))}
+          </select>
+        </label>
         <div className="nav-caption">WORKSPACE</div>
         <nav>
           {nav.map((item) => (
@@ -548,15 +601,17 @@ export default function App() {
             Workspace <span>/</span> <b>{page}</b>
           </div>
           <div className="top-actions">
-            <button className="icon-button" aria-label="Help">
-              <CircleHelp size={17} />
-            </button>
             <button
-              className="icon-button notification"
-              aria-label="Notifications"
+              className="icon-button"
+              aria-label="Help"
+              title="Help"
+              onClick={() =>
+                setNotice(
+                  "For the demo walkthrough, setup, and workflow notes, see the project README on GitHub.",
+                )
+              }
             >
-              <Bell size={17} />
-              <i />
+              ?
             </button>
             <span className="top-divider" />
             <span className="top-date">{today}</span>
@@ -634,24 +689,30 @@ export default function App() {
           )}
           {page === "Awards & budgets" && (
             <Awards
-              orgId={profile.organizations[0]?.id}
+              orgId={selectedOrganizationId ?? undefined}
               responses={responses}
               canEdit={canEdit}
               onNotice={setNotice}
-              onRefresh={refresh}
+              onRefresh={() => refresh()}
             />
           )}
           {page === "Reporting calendar" && (
             <Reporting
+              orgId={selectedOrganizationId ?? undefined}
               canEdit={canEdit}
-              canReview={profile.organizations.some((o) =>
-                ["org_admin", "reviewer"].includes(o.role),
-              )}
+              canReview={
+                activeOrganization
+                  ? ["org_admin", "reviewer"].includes(activeOrganization.role)
+                  : false
+              }
               onNotice={setNotice}
             />
           )}
           {page === "Team access" && (
-            <Team orgId={profile.organizations[0]?.id} onNotice={setNotice} />
+            <Team
+              orgId={selectedOrganizationId ?? undefined}
+              onNotice={setNotice}
+            />
           )}
           {page === "My profile" && (
             <ProfileSettings
@@ -672,7 +733,9 @@ export default function App() {
               onResolve={resolve}
             />
           )}
-          {page === "Activity log" && <Audit />}
+          {page === "Activity log" && (
+            <Audit orgId={selectedOrganizationId ?? undefined} />
+          )}
           <footer className="page-footer">
             <span>
               ReliefTrail Funding Workspace{" "}
@@ -735,13 +798,16 @@ export default function App() {
                 {!editing && (
                   <label>
                     Organization
-                    <select name="organization_id" required>
-                      {orgs.map((o) => (
-                        <option key={o.id} value={o.id}>
-                          {o.name}
-                        </option>
-                      ))}
-                    </select>
+                    <input
+                      type="hidden"
+                      name="organization_id"
+                      value={selectedOrganizationId ?? ""}
+                    />
+                    <input
+                      value={activeOrganization?.name ?? ""}
+                      readOnly
+                      aria-label="Selected organization"
+                    />
                   </label>
                 )}
                 <label>
@@ -787,7 +853,7 @@ export default function App() {
                   required
                 />
               </label>
-              {editing && (
+              {editing && activeOrganization?.role === "org_admin" && (
                 <label>
                   Response status
                   <select name="status" defaultValue={editing.status}>
@@ -859,8 +925,9 @@ function Awards({
   const [saving, setSaving] = useState(false);
   const [allocation, setAllocation] = useState<Award | null>(null);
   async function load() {
+    if (!orgId) return;
     try {
-      setItems(await get<Award[]>("/api/awards"));
+      setItems(await get<Award[]>(`/api/awards?organization_id=${orgId}`));
     } catch (e) {
       onNotice(e instanceof Error ? e.message : "Could not load awards");
     } finally {
@@ -868,8 +935,10 @@ function Awards({
     }
   }
   useEffect(() => {
+    setLoading(true);
+    setItems([]);
     void load();
-  }, []);
+  }, [orgId]);
   async function create(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setSaving(true);
@@ -1248,10 +1317,12 @@ function Awards({
 }
 
 function Reporting({
+  orgId,
   canEdit,
   canReview,
   onNotice,
 }: {
+  orgId: number | undefined;
   canEdit: boolean;
   canReview: boolean;
   onNotice: (s: string) => void;
@@ -1260,8 +1331,13 @@ function Reporting({
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState<Milestone | null>(null);
   async function load() {
+    if (!orgId) return;
     try {
-      setItems(await get<Milestone[]>("/api/reporting-calendar"));
+      setItems(
+        await get<Milestone[]>(
+          `/api/reporting-calendar?organization_id=${orgId}`,
+        ),
+      );
     } catch (e) {
       onNotice(
         e instanceof Error ? e.message : "Could not load reporting calendar",
@@ -1271,8 +1347,10 @@ function Reporting({
     }
   }
   useEffect(() => {
+    setLoading(true);
+    setItems([]);
     void load();
-  }, []);
+  }, [orgId]);
   async function update(
     item: Milestone,
     status: "submitted" | "accepted" | "needs_revision",
@@ -1487,6 +1565,8 @@ function Team({
     }
   }
   useEffect(() => {
+    setLoading(true);
+    setItems([]);
     void load();
   }, [orgId]);
   async function change(member: TeamMember, role: string) {
@@ -2616,7 +2696,7 @@ function ReviewQueue({
     </>
   );
 }
-function Audit() {
+function Audit({ orgId }: { orgId: number | undefined }) {
   const [items, setItems] = useState<
     {
       id: number;
@@ -2630,11 +2710,14 @@ function Audit() {
   >([]);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
-    void get<typeof items>("/api/audit")
+    if (!orgId) return;
+    setLoading(true);
+    setItems([]);
+    void get<typeof items>(`/api/audit?organization_id=${orgId}`)
       .then(setItems)
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, [orgId]);
   return (
     <>
       <PageTitle
@@ -2723,4 +2806,3 @@ function Empty({ message }: { message: string }) {
     </div>
   );
 }
-
