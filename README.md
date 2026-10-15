@@ -15,7 +15,7 @@ This is a separate follow-on project to [ReliefTrail's earlier contract prototyp
 - Submit a report against a donor deadline; reviewers can accept it or return it for changes.
 - Let administrators update the roles of existing team accounts. Roles and editable actions follow the selected organization. Demo accounts demonstrate admin, editor, reviewer, and viewer access.
 - Let users update their display name and change their password from account settings. Password changes require the current password, require 15 characters, and revoke other active sessions.
-- Import a CSV after full-file validation; accepted rows are committed together, duplicates are skipped, and the file is processed in memory only.
+- Import a CSV after full-file validation; contributions may be imported directly, while disbursements must identify an active award and allocation category for an approved response. The API checks the award dates and budget before the transaction commits. Duplicate rows are skipped and the file is processed in memory only.
 - Search and export the fictional funding records.
 - Resolve a reconciliation flag and see who performed the action in the activity history.
 
@@ -110,7 +110,7 @@ Requirements: Docker Desktop with Compose, Node.js 22+, and pnpm.
 | Reviewer | `reviewer@relieftrail.test` | `reviewer-demo` |
 | Viewer | `viewer@relieftrail.test` | `viewer-demo` |
 
-PostgreSQL runs in a named Docker volume and binds to loopback only. SQL files under `database/` are applied on the first database start. If you change the initial schema and want to rebuild this disposable demo from scratch, run `docker compose down -v` (this removes the local database contents), then `docker compose up --build`.
+PostgreSQL runs in a named Docker volume and binds to loopback only. The database bootstrap account owns the schema; the API connects as a separate non-superuser role with only the table and sequence permissions it needs. SQL files under `database/` are applied on the first database start. If you change the initial schema and want to rebuild this disposable demo from scratch, run `docker compose down -v` (this removes the local database contents), then `docker compose up --build`.
 
 ## Database design
 
