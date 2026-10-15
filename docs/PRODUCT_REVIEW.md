@@ -14,6 +14,9 @@ The current screens cover the main staff workflow: review or edit response recor
 2. **Added password changes.** A user must provide the current password and a new passphrase of at least 15 characters. The API hashes it with Argon2id, revokes prior active sessions, and issues a fresh session to the current browser.
 3. **Made demo account initialization non-destructive.** Restarting the API no longer resets a user's changed password, display name, disabled status, or organization role. Existing demo accounts are left as-is; only missing demo accounts and memberships are added.
 4. **Clarified the donation boundary.** Contributions are records reported by staff or imported from CSV. There is no public donor page, payment gateway, receipt flow, or movement of money. This is intentional for a grants and response-funding workspace.
+5. **Added a real organization switcher.** The selected organization now scopes the dashboard, responses, funding records, awards, reporting calendar, review queue, activity log, and CSV imports. The API verifies membership for scoped reads, and the interface uses that organization's role when deciding which actions to show.
+6. **Removed misleading interface controls.** The notification bell was removed because notification workflows do not exist; Help now points users to the documented walkthrough instead of being an inactive button.
+7. **Clarified approval controls in the response editor.** Only organization administrators see response status controls for approval and closure; editors can still update descriptive fields.
 
 ## Remaining work, ordered by importance
 
@@ -28,9 +31,9 @@ The current screens cover the main staff workflow: review or edit response recor
 ### Product improvements for the portfolio version
 
 - Add invitation and onboarding screens so an administrator can add teammates instead of only changing roles on preloaded accounts.
-- Add a clear organization switcher; the current dashboard combines memberships while some creation forms use the first organization.
 - Improve audit events with a stable actor user ID and before/after values where appropriate. The present log labels the actor by name and records a limited set of actions.
 - Add a user-facing record detail page, pagination for large lists, and clearer import history with row-level validation feedback.
+- Add task ownership and reminders only after confirming which deadlines and handoffs are most useful to target users.
 - Replace illustrative preview assets with screenshots captured from this exact running build and add a short narrated demo.
 
 ### If a public donation experience is desired
@@ -40,4 +43,3 @@ Treat it as a separate, explicitly scoped module. A real donation flow needs a p
 ## Evidence and limits
 
 The screenshots supplied by the project owner show the Responses, Awards & budgets, Reporting calendar, Funding records, Review queue, and Activity log screens. They confirm the intended internal-workspace design, but do not by themselves verify role behavior, database persistence, or security. The current project documentation identifies missing MFA, invitation/recovery, formal review, tested backups, and production operations. Those gaps remain open after this pass.
-
