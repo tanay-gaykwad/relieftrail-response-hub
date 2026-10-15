@@ -775,6 +775,12 @@ async def import_csv(file: UploadFile = File(...), user: dict = Depends(current_
                     (response["id"],organization_id,award_code,allocation_category)).fetchone()
                 if not allocation:
                     raise HTTPException(status_code=422, detail=f"Row {line}: award and allocation category do not match an active award for this response.")
+                # Recheck after locking the budget line so concurrent duplicate imports remain idempotent.
+                duplicate = conn.execute("SELECT 1 FROM funding_records WHERE response_id=%s AND source_id=%s AND source_reference=%s",
+                                         (response["id"],source["id"],source_reference)).fetchone()
+                if duplicate:
+                    skipped += 1
+                    continue
                 if not allocation["start_date"] <= recorded_on <= allocation["end_date"]:
                     raise HTTPException(status_code=422, detail=f"Row {line}: disbursement date must be within the award period.")
                 spent = conn.execute("""SELECT coalesce(sum(amount),0) AS total FROM funding_records
