@@ -163,8 +163,8 @@ def test_csv_import_links_disbursement_to_active_budget(monkeypatch):
     fake_db = ImportDatabase()
     monkeypatch.setattr(main, "pool", fake_db)
     payload = (
-        b"response_code,record_type,amount,currency,recorded_on,reference,source_reference,award_code,allocation_category\\n"
-        b"FLOOD-26-01,disbursement,25.00,USD,2026-10-01,Pay-1,source-1,AWARD-01,Shelter\\n"
+        b"response_code,record_type,amount,currency,recorded_on,reference,source_reference,award_code,allocation_category\n"
+        b"FLOOD-26-01,disbursement,25.00,USD,2026-10-01,Pay-1,source-1,AWARD-01,Shelter\n"
     )
     upload = UploadFile(filename="records.csv", file=io.BytesIO(payload))
     user = {"id": 4, "full_name": "Editor", "memberships": {1: "editor"}}
