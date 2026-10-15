@@ -23,12 +23,13 @@ services:
       POSTGRES_USER: relieftrail
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local_demo_only}
       APP_DB_PASSWORD: ${APP_DB_PASSWORD:-local-app-only-change-before-deployment}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-local_demo_only}
     volumes:
       - ./database/bootstrap-app-role.sql:/bootstrap/bootstrap-app-role.sql:ro
     entrypoint: ["/bin/sh", "-ec"]
     command: |
-      until pg_isready -h db -U "${POSTGRES_USER}" -d "${POSTGRES_DB}"; do sleep 1; done
-      PGPASSWORD="${POSTGRES_PASSWORD}" psql -h db -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -v ON_ERROR_STOP=1 -f /bootstrap/bootstrap-app-role.sql
+      until pg_isready -h db -U relieftrail -d relieftrail; do sleep 1; done
+      psql -h db -U relieftrail -d relieftrail -v ON_ERROR_STOP=1 -f /bootstrap/bootstrap-app-role.sql
     depends_on:
       db:
         condition: service_healthy
