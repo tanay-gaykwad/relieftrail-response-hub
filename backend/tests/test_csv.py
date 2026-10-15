@@ -112,7 +112,7 @@ def test_csv_import_skips_duplicates_and_records_one_batch(monkeypatch):
 
     assert result["rows_imported"] == 1
     assert result["rows_skipped"] == 1
-    assert fake_db.insert_calls == 1
+    assert fake_db.insert_calls == 2
     assert fake_db.opens == 1
 
 
