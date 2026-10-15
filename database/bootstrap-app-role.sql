@@ -1,0 +1,18 @@
+\set ON_ERROR_STOP on
+\getenv app_db_password APP_DB_PASSWORD
+
+SELECT format('CREATE ROLE relieftrail_app LOGIN PASSWORD %L', :'app_db_password')
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'relieftrail_app')
+\gexec
+
+ALTER ROLE relieftrail_app WITH LOGIN PASSWORD :'app_db_password'
+    NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOINHERIT;
+REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+GRANT CONNECT ON DATABASE relieftrail TO relieftrail_app;
+GRANT USAGE ON SCHEMA public TO relieftrail_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO relieftrail_app;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO relieftrail_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE relieftrail IN SCHEMA public
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO relieftrail_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE relieftrail IN SCHEMA public
+    GRANT USAGE, SELECT ON SEQUENCES TO relieftrail_app;
