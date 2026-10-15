@@ -114,3 +114,62 @@ def test_csv_import_skips_duplicates_and_records_one_batch(monkeypatch):
     assert result["rows_skipped"] == 1
     assert fake_db.insert_calls == 1
     assert fake_db.opens == 1
+
+
+def test_csv_import_links_disbursement_to_active_budget(monkeypatch):
+    from datetime import date
+    from decimal import Decimal
+
+    class Result:
+        def __init__(self, rows=()):
+            self.rows = list(rows)
+
+        def fetchall(self):
+            return self.rows
+
+        def fetchone(self):
+            return self.rows[0] if self.rows else None
+
+    class ImportDatabase:
+        allocation_id = 88
+        inserted_allocation = None
+
+        @contextmanager
+        def connection(self):
+            database = self
+
+            class Connection:
+                def execute(self, sql, params=()):
+                    if "FROM responses WHERE code=ANY(%s)" in sql:
+                        return Result([{"id": 3, "code": "FLOOD-26-01", "organization_id": 1, "status": "approved"}])
+                    if "INSERT INTO import_batches" in sql:
+                        return Result([{"id": 12}])
+                    if "SELECT id FROM funding_sources" in sql:
+                        return Result([{"id": 2}])
+                    if "SELECT 1 FROM funding_records" in sql:
+                        return Result()
+                    if "FROM award_allocations al JOIN funding_awards" in sql:
+                        return Result([{"id": 88, "budget_amount": Decimal("100.00"),
+                                        "start_date": date(2026, 1, 1), "end_date": date(2026, 12, 31)}])
+                    if "SELECT coalesce(sum(amount),0) AS total FROM funding_records" in sql:
+                        return Result([{"total": Decimal("10.00")}])
+                    if "INSERT INTO funding_records" in sql:
+                        database.inserted_allocation = params[1]
+                        return Result([{"id": 99}])
+                    return Result()
+
+            yield Connection()
+
+    fake_db = ImportDatabase()
+    monkeypatch.setattr(main, "pool", fake_db)
+    payload = (
+        b"response_code,record_type,amount,currency,recorded_on,reference,source_reference,award_code,allocation_category\\n"
+        b"FLOOD-26-01,disbursement,25.00,USD,2026-10-01,Pay-1,source-1,AWARD-01,Shelter\\n"
+    )
+    upload = UploadFile(filename="records.csv", file=io.BytesIO(payload))
+    user = {"id": 4, "full_name": "Editor", "memberships": {1: "editor"}}
+
+    result = asyncio.run(main.import_csv(upload, user, organization_id=1))
+
+    assert result["rows_imported"] == 1
+    assert fake_db.inserted_allocation == 88
