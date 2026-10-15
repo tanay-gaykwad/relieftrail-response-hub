@@ -701,8 +701,8 @@ def funding_records(record_type: Literal["contribution", "disbursement"] | None 
 
 
 @app.post("/api/imports/csv", status_code=201)
-async def import_csv(file: UploadFile = File(...), organization_id: int | None = None,
-                     user: dict = Depends(current_user)):
+async def import_csv(file: UploadFile = File(...), user: dict = Depends(current_user),
+                     organization_id: int | None = None):
     """Validate the full file in memory, then write it as one database transaction."""
     safe_name = (file.filename or "funding.csv").replace("\\", "/").split("/")[-1][:120]
     if not safe_name.lower().endswith(".csv"):
