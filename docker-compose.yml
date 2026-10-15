@@ -16,10 +16,27 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+  app-role-init:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: relieftrail
+      POSTGRES_USER: relieftrail
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local_demo_only}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:-local-app-only-change-before-deployment}
+    volumes:
+      - ./database/bootstrap-app-role.sql:/bootstrap/bootstrap-app-role.sql:ro
+    entrypoint: ["/bin/sh", "-ec"]
+    command: |
+      until pg_isready -h db -U "${POSTGRES_USER}" -d "${POSTGRES_DB}"; do sleep 1; done
+      PGPASSWORD="${POSTGRES_PASSWORD}" psql -h db -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -v ON_ERROR_STOP=1 -f /bootstrap/bootstrap-app-role.sql
+    depends_on:
+      db:
+        condition: service_healthy
   api:
     build: ./backend
     environment:
-      DATABASE_URL: postgresql://relieftrail:${POSTGRES_PASSWORD:-local_demo_only}@db:5432/relieftrail
+      DATABASE_URL: postgresql://relieftrail_app:${APP_DB_PASSWORD:-local-app-only-change-before-deployment}@db:5432/relieftrail
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:-local-app-only-change-before-deployment}
       APP_ENV: ${APP_ENV:-demo}
       APP_SECRET_KEY: ${APP_SECRET_KEY:-local-demo-only-change-before-deployment}
       FRONTEND_ORIGINS: ${FRONTEND_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
@@ -28,8 +45,8 @@ services:
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:
-      db:
-        condition: service_healthy
+      app-role-init:
+        condition: service_completed_successfully
   frontend:
     build: ./frontend
     ports:
