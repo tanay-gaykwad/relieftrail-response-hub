@@ -66,7 +66,7 @@ Sign in as the demo administrator, review a response, inspect its award and allo
 
 ## Project status
 
-The repository contains a working portfolio application and a local Compose setup. Backend unit/security tests and optional PostgreSQL integration tests are included; GitHub Actions runs backend tests and lint checks, plus frontend format checks and a production build. A public, deployed service has not been configured or verified. The project is production-minded portfolio work, not certified or ready for real humanitarian operations.
+The repository contains a working portfolio application and a local Compose setup. GitHub Actions runs backend tests and lint checks, frontend format checks and a production build, boots the full Compose stack to verify login and response create/read/update/delete, and checks the local blockchain-to-PostgreSQL-to-authenticated-API flow. A public, deployed service has not been configured or verified. The project is production-minded portfolio work, not certified or ready for real humanitarian operations.
 
 ## What this project demonstrates
 
@@ -174,7 +174,7 @@ backend/           FastAPI API, login, role checks, CSV workflow
 database/          PostgreSQL schema, seed data, SQL examples
 docs/              Product scope, architecture, data model, setup guide
 backend/tests/     Auth, authorization, CSV, and PostgreSQL integrity checks
-.github/workflows/ CI checks for backend and frontend
+.github/workflows/ CI for backend/frontend, full Compose startup, and blockchain bridge
 portfolio-site/    Static one-page portfolio; GitHub Pages workflow included
 output/pdf/        Project report for coursework submission
 LICENSE            MIT License, matching the companion prototype
