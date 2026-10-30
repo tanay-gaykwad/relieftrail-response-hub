@@ -78,7 +78,10 @@ jobs:
         working-directory: relieftrail-blockchain
         run: |
           pnpm deploy:local > "$RUNNER_TEMP/deployment.log"
-          node -e 'const fs=require("fs");const text=fs.readFileSync(process.argv[1],"utf8");const match=text.match(/\{\s*"chainId"[\s\S]*?\n\}/);if(!match)throw Error("Deployment JSON was not found.");const d=JSON.parse(match[0]);fs.appendFileSync(process.env.GITHUB_ENV,"EVM_CONTRACT_ADDRESS="+d.contractAddress+"\nEVM_START_BLOCK="+d.startBlock+"\n");' "$RUNNER_TEMP/deployment.log"
+          CONTRACT_ADDRESS=$(node -e 'const fs=require("fs");const text=fs.readFileSync(process.argv[1],"utf8");const match=text.match(/\{\s*"chainId"[\s\S]*?\n\}/);if(!match)throw Error("Deployment JSON was not found.");process.stdout.write(JSON.parse(match[0]).contractAddress)' "$RUNNER_TEMP/deployment.log")
+          START_BLOCK=$(node -e 'const fs=require("fs");const text=fs.readFileSync(process.argv[1],"utf8");const match=text.match(/\{\s*"chainId"[\s\S]*?\n\}/);if(!match)throw Error("Deployment JSON was not found.");process.stdout.write(String(JSON.parse(match[0]).startBlock))' "$RUNNER_TEMP/deployment.log")
+          printf 'EVM_CONTRACT_ADDRESS=%s\nEVM_START_BLOCK=%s\n' "$CONTRACT_ADDRESS" "$START_BLOCK" >> "$GITHUB_ENV"
+          export RELIEFTRAIL_CONTRACT_ADDRESS="$CONTRACT_ADDRESS"
           pnpm demo:events
       - name: Index chain events once
         run: python backend/blockchain_sync_worker.py --once
