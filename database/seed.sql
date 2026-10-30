@@ -7,9 +7,9 @@ INSERT INTO responses(organization_id,code,title,location,summary,status,start_d
 (1,'HEAT-26-02','Community Heat Support','North Ward','Fictional response coordinating cooling spaces and water access.','approved','2026-10-02'),
 (2,'STORM-26-03','Coastal Storm Preparedness','Coastal Ward','Fictional preparedness response for local community groups.','draft','2026-10-06');
 
--- Seed only a fictional demo account; the API replaces this PBKDF2 hash during demo startup.
+-- Seed a fictional demo account using an Argon2id hash for the documented local-only password.
 INSERT INTO users(email,full_name,password_hash) VALUES
-('admin@relieftrail.test','Jamie Davis','pbkdf2_sha256$_0zuHb5qS-C2fO5vu_Ow2g==$5biVGq4E47Kz2uiLtwSg5Cg-4a69Fzf-NL9eFPCxq-M=')
+('admin@relieftrail.test','Jamie Davis','$argon2id$v=19$m=65536,t=3,p=4$/SvRF5qbY0u7d2sPPzbLXw$8MvSeIznGcVLyeXNHP2f0VpI2eE+Fdkt5MKcQoCB0FI')
 ON CONFLICT(email) DO NOTHING;
 
 INSERT INTO funders(organization_id,name,kind) VALUES
