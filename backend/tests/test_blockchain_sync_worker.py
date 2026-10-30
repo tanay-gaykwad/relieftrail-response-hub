@@ -56,6 +56,8 @@ def test_event_amount_and_deduplication_key_are_preserved():
     store_batch(conn, 31337, "0x4444444444444444444444444444444444444444", 40, 50, [event])
 
     insert = next(item for item in conn.fake_cursor.executions if "INSERT INTO blockchain_events" in item[0])
+    assert insert[1][2].startswith("0x") and len(insert[1][2]) == 66
+    assert insert[1][5].startswith("0x") and len(insert[1][5]) == 66
     assert insert[1][11] == "1234567890123456789"
     assert insert[1][15] == "confirmed"
     assert "UNIQUE (chain_id,contract_address,transaction_hash,log_index)" not in insert[0]
