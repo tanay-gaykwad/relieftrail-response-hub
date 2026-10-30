@@ -57,7 +57,7 @@ def test_event_amount_and_deduplication_key_are_preserved():
 
     insert = next(item for item in conn.fake_cursor.executions if "INSERT INTO blockchain_events" in item[0])
     assert insert[1][11] == "1234567890123456789"
-    assert insert[1][16] == "confirmed"
+    assert insert[1][15] == "confirmed"
     assert "UNIQUE (chain_id,contract_address,transaction_hash,log_index)" not in insert[0]
     assert "ON CONFLICT (chain_id,contract_address,transaction_hash,log_index) DO NOTHING" in insert[0]
     assert conn.transactions == 1
@@ -86,6 +86,6 @@ def test_unknown_response_stays_unmatched_without_fake_response_id():
     insert = next(item for item in conn.fake_cursor.executions if "INSERT INTO blockchain_events" in item[0])
     assert insert[1][6] is None
     assert insert[1][7] == "UNKNOWN-01"
-    assert insert[1][16] == "unmatched"
+    assert insert[1][15] == "unmatched"
     assert insert[1][9] == "0x6666666666666666666666666666666666666666"
     assert conn.transactions == 1
