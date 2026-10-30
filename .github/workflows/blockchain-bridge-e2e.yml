@@ -85,6 +85,44 @@ jobs:
           pnpm demo:events
       - name: Index chain events once
         run: python backend/blockchain_sync_worker.py --once
+      - name: Start ResponseHub API
+        run: |
+          cd backend
+          APP_ENV=demo APP_SECRET_KEY=ci-only-secret-for-local-integration uvicorn main:app --host 127.0.0.1 --port 8000 > "$RUNNER_TEMP/api.log" 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl --silent --fail http://127.0.0.1:8000/api/health; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/api.log"
+          exit 1
+      - name: Verify authenticated API can read indexed events
+        run: |
+          python - <<'PY'
+          import httpx
+
+          with httpx.Client(base_url="http://127.0.0.1:8000") as client:
+              csrf_response = client.get("/api/auth/csrf")
+              assert csrf_response.status_code == 200
+              csrf_token = client.cookies.get("rt_csrf")
+              login = client.post(
+                  "/api/auth/login",
+                  json={"email": "admin@relieftrail.test", "password": "demo-change-me"},
+                  headers={"X-CSRF-Token": csrf_token},
+              )
+              assert login.status_code == 200, login.text
+              organization_id = login.json()["organizations"][0]["organization_id"]
+              response = client.get(
+                  "/api/blockchain-events",
+                  params={"organization_id": organization_id},
+              )
+              assert response.status_code == 200, response.text
+              events = response.json()
+              assert len(events) == 3, events
+              assert {event["event_type"] for event in events} == {"donation", "payout"}, events
+              assert all(event["response_code"] == "FLOOD-26-01" for event in events), events
+          PY
       - name: Verify linked records and idempotent re-run
         run: |
           python - <<'PY'
