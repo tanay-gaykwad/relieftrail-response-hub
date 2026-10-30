@@ -92,8 +92,8 @@ def store_batch(conn, chain_id: int, address: str, start: int, end: int, events:
                         asset_address,asset_decimals,purpose,evidence_hash,confirmation_status)
                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,18,%s,%s,%s)
                        ON CONFLICT (chain_id,contract_address,transaction_hash,log_index) DO NOTHING""",
-                    (chain_id,address,event["transactionHash"].hex(),event["logIndex"],event["blockNumber"],
-                     event["blockHash"].hex(),response_id,code,event_type,actor,recipient,
+                    (chain_id,address,Web3.to_hex(event["transactionHash"]),event["logIndex"],event["blockNumber"],
+                     Web3.to_hex(event["blockHash"]),response_id,code,event_type,actor,recipient,
                      str(args["amount"]),ZERO_ADDRESS,purpose,evidence,
                      "confirmed" if response_id is not None else "unmatched"),
                 )
