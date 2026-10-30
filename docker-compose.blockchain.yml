@@ -24,7 +24,9 @@ services:
       EVM_CONTRACT_ADDRESS: ${EVM_CONTRACT_ADDRESS:-}
       EVM_CHAIN_ID: ${EVM_CHAIN_ID:-31337}
       EVM_START_BLOCK: ${EVM_START_BLOCK:-0}
-      EVM_CONFIRMATIONS: ${EVM_CONFIRMATIONS:-2}
+      # Local Hardhat has no reorgs or background block mining, so index its head immediately.
+      # Set a positive confirmation depth explicitly when using a live test chain.
+      EVM_CONFIRMATIONS: ${EVM_CONFIRMATIONS:-0}
       EVM_POLL_SECONDS: ${EVM_POLL_SECONDS:-5}
       EVM_BATCH_SIZE: ${EVM_BATCH_SIZE:-200}
     depends_on:
