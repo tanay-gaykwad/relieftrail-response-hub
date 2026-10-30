@@ -41,9 +41,9 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: backend/requirements.txt
+          cache-dependency-path: backend/requirements-dev.txt
       - name: Install worker dependencies
-        run: python -m pip install -r backend/requirements.txt
+        run: python -m pip install -r backend/requirements-dev.txt
       - name: Initialize disposable database
         run: |
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/schema.sql
