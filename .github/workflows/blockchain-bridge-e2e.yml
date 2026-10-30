@@ -36,7 +36,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: tanay-gaykwad/relieftrail-blockchain
-          ref: main
+          # Pin the ABI and event fixture used by this integration check.
+          ref: 2901b5f27f7dc069a1e2f7433df026208a365e54
           path: relieftrail-blockchain
       - name: Set up Python
         uses: actions/setup-python@v5
