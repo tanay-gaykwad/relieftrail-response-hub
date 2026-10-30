@@ -72,8 +72,7 @@ def store_batch(conn, chain_id: int, address: str, start: int, end: int, events:
                     evidence = None
                     event_type = "donation"
                 else:
-                    transaction = w3.eth.get_transaction(event["transactionHash"])
-                    actor = transaction["from"]
+                    actor = event["actor_address"]
                     recipient = args["recipient"]
                     purpose = args["purpose"]
                     evidence = Web3.to_hex(args["evidenceHash"])
@@ -122,7 +121,9 @@ def scan_once(w3: Web3, contract: Any, conn, settings: dict) -> int:
     for name in ("DonationReceived", "ReliefPaid"):
         decoder = getattr(contract.events, name)()
         logs = decoder.get_logs(from_block=start, to_block=end)
-        events.extend({"name": name, "args": log["args"], **log} for log in logs)
+        for log in logs:
+            actor = log["args"]["donor"] if name == "DonationReceived" else w3.eth.get_transaction(log["transactionHash"])["from"]
+            events.append({"name": name, "args": log["args"], "actor_address": actor, **log})
     events.sort(key=lambda item: (item["blockNumber"], item["logIndex"]))
     store_batch(conn, chain_id, address, start, end, events)
     logging.info("Scanned blocks %s-%s; indexed %s events", start, end, len(events))
