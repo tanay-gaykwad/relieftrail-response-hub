@@ -34,7 +34,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: tanay-gaykwad/relieftrail-blockchain
-          ref: codex/local-bridge-e2e-fixture
+          ref: main
           path: relieftrail-blockchain
       - name: Set up Python
         uses: actions/setup-python@v5
