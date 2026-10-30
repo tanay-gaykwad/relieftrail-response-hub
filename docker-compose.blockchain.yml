@@ -8,9 +8,10 @@ services:
     volumes:
       - ./database/migrations/2026_10_blockchain_event_ledger.sql:/migration.sql:ro
     entrypoint: ["/bin/sh", "-ec"]
-    command: |
-      until pg_isready -h db -U relieftrail -d relieftrail; do sleep 1; done
-      psql -h db -U relieftrail -d relieftrail -v ON_ERROR_STOP=1 -f /migration.sql
+    command:
+      - |
+        until pg_isready -h db -U relieftrail -d relieftrail; do sleep 1; done
+        psql -h db -U relieftrail -d relieftrail -v ON_ERROR_STOP=1 -f /migration.sql
     depends_on:
       db:
         condition: service_healthy
