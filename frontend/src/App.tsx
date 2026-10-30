@@ -43,6 +43,7 @@ type Page =
   | "Overview"
   | "Responses"
   | "Funding records"
+  | "Blockchain activity"
   | "Awards & budgets"
   | "Reporting calendar"
   | "Team access"
@@ -492,6 +493,7 @@ export default function App() {
     { label: "Awards & budgets", icon: Landmark },
     { label: "Reporting calendar", icon: CalendarDays },
     { label: "Funding records", icon: HandCoins },
+    { label: "Blockchain activity", icon: Activity },
     {
       label: "Review queue",
       icon: TriangleAlert,
@@ -686,6 +688,9 @@ export default function App() {
               onExport={exportCsv}
               onImport={() => importRef.current?.click()}
             />
+          )}
+          {page === "Blockchain activity" && (
+            <BlockchainActivity orgId={selectedOrganizationId ?? undefined} />
           )}
           {page === "Awards & budgets" && (
             <Awards
@@ -2435,6 +2440,79 @@ function Responses({
     </>
   );
 }
+
+type ChainEvent = {
+  id: number;
+  chain_id: number;
+  contract_address: string;
+  transaction_hash: string;
+  log_index: number;
+  block_number: number;
+  response_code: string;
+  event_type: "donation" | "payout";
+  actor_address: string;
+  recipient_address: string | null;
+  amount_raw: string;
+  asset_address: string;
+  asset_decimals: number;
+  purpose: string | null;
+  evidence_hash: string | null;
+  confirmation_status: string;
+  observed_at: string;
+  response_title: string;
+};
+
+function formatRawAmount(raw: string, decimals: number) {
+  const value = BigInt(raw);
+  const scale = 10n ** BigInt(decimals);
+  const whole = value / scale;
+  const fraction = (value % scale).toString().padStart(decimals, "0").replace(/0+$/, "");
+  return fraction ? `${whole}.${fraction}` : whole.toString();
+}
+
+function BlockchainActivity({ orgId }: { orgId: number | undefined }) {
+  const [events, setEvents] = useState<ChainEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    if (!orgId) return;
+    let active = true;
+    setLoading(true);
+    setError("");
+    void get<ChainEvent[]>(`/api/blockchain-events?organization_id=${orgId}`)
+      .then((data) => { if (active) setEvents(data); })
+      .catch((err) => { if (active) setError(err instanceof Error ? err.message : "Could not load chain activity."); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [orgId]);
+  return (
+    <>
+      <PageTitle eyebrow="ON-CHAIN TEST LEDGER" title="Blockchain activity" description="Confirmed local or test-chain events linked to this organization’s response codes." />
+      <div className="notice-card">
+        <ShieldCheck size={18} />
+        <span>These are confirmed chain events, shown separately from reported funding records. They do not prove aid delivery or represent a production payment service.</span>
+      </div>
+      {error && <div className="error-banner"><TriangleAlert size={17} /><span>{error}</span></div>}
+      <div className="table-card">
+        <table>
+          <thead><tr><th>EVENT</th><th>RESPONSE</th><th>AMOUNT</th><th>BLOCK</th><th>TRANSACTION</th></tr></thead>
+          <tbody>
+            {loading ? <tr><td colSpan={5}>Loading chain activity…</td></tr> :
+             events.length === 0 ? <tr><td colSpan={5}>No confirmed chain events for this organization yet. Start the local chain bridge to see test events.</td></tr> :
+             events.map((event) => <tr key={event.id}>
+               <td>{event.event_type === "donation" ? "Donation" : "Payout"}<small>{event.confirmation_status}</small></td>
+               <td>{event.response_title}<small>{event.response_code}</small></td>
+               <td>{formatRawAmount(event.amount_raw,event.asset_decimals)} ETH</td>
+               <td>{event.block_number}</td>
+               <td><a href={`#tx-${event.transaction_hash}`} title={event.transaction_hash}>{event.transaction_hash.slice(0,12)}…</a></td>
+             </tr>)}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
 function Funding({
   rows,
   loading,
