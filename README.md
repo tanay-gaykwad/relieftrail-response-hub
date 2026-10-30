@@ -117,24 +117,50 @@ PostgreSQL runs in a named Docker volume and binds to loopback only. The databas
 
 This opt-in walkthrough uses only the local Hardhat node and fictional response codes. It does not connect to a public network or real funds.
 
-1. In the `relieftrail-blockchain` clone, start its local node with `docker compose up -d`.
-2. In that repository, run `pnpm install --frozen-lockfile` and `pnpm deploy:local -- --network localhost` only if your package script does not already pass the network. Record the printed contract address and deployment block. (The script selects `localhost` itself.)
-3. In PowerShell, from this ResponseHub folder, set the address and block printed by deployment:
+1. In the `relieftrail-blockchain` clone, start the local Hardhat node:
+
+   ```powershell
+   docker compose up -d
+   ```
+
+2. Deploy the contract from that repository. Install dependencies once if needed, then run the script (it already selects the local network):
+
+   ```powershell
+   pnpm install --frozen-lockfile
+   pnpm deploy:local
+   ```
+
+   Record the printed contract address and deployment block.
+
+3. In PowerShell, from this ResponseHub folder, configure the contract address and deployment block:
 
    ```powershell
    $env:EVM_CONTRACT_ADDRESS = "0x..."
    $env:EVM_START_BLOCK = "1"
    ```
 
-4. Start the app and event indexer with the blockchain overlay:
+4. Start the app and indexer:
 
    ```powershell
    docker compose -f docker-compose.yml -f docker-compose.blockchain.yml --profile blockchain up --build
    ```
 
-5. Call `donate("FLOOD-26-01")` from a local Hardhat account, or call `payRelief` from the local organizer using that response code. Open **Blockchain activity** in ResponseHub after the configured confirmation depth.
+5. In a second terminal, from the blockchain repository, emit fictional donation and payout events:
 
-The indexer reads only the configured chain and contract, checks the chain ID, uses a transactionally advanced cursor, and deduplicates logs by chain, contract, transaction, and log index. Unmatched response codes stay in the separate event ledger and are not assigned to a fabricated response. The initial start block is explicit so the worker never silently guesses a recent history window. This demo does not provide deep-reorg recovery, public explorer links, or production operations; it is not an accounting source for real funds.
+   ```powershell
+   $env:RELIEFTRAIL_CONTRACT_ADDRESS = "0x..."
+   pnpm demo:events
+   ```
+
+   The command uses only Hardhat's local simulated accounts and is guarded to chain ID 31337. Open **Blockchain activity** in ResponseHub; the indexer should show two donations and one payout for `FLOOD-26-01`.
+
+For a one-shot sync check instead of the continuous worker, run from the ResponseHub folder:
+
+```powershell
+docker compose -f docker-compose.yml -f docker-compose.blockchain.yml --profile blockchain run --rm blockchain-worker python blockchain_sync_worker.py --once
+```
+
+The indexer reads only the configured chain and contract, checks the chain ID, stores exact raw amounts, advances the cursor in the same database transaction as event inserts, and deduplicates logs by chain, contract, transaction, and log index. The local Hardhat overlay uses zero confirmations so freshly mined sample events appear immediately; set a positive confirmation depth for a live test chain. Unmatched response codes stay in the separate event ledger and are not assigned to a fabricated response. This demo does not provide deep-reorg recovery, public explorer links, or production operations; it is not an accounting source for real funds.
 
 ## Database design
 
