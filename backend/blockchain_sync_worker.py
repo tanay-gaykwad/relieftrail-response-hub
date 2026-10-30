@@ -72,7 +72,8 @@ def store_batch(conn, chain_id: int, address: str, start: int, end: int, events:
                     evidence = None
                     event_type = "donation"
                 else:
-                    actor = args["recipient"]
+                    transaction = w3.eth.get_transaction(event["transactionHash"])
+                    actor = transaction["from"]
                     recipient = args["recipient"]
                     purpose = args["purpose"]
                     evidence = Web3.to_hex(args["evidenceHash"])
