@@ -68,6 +68,9 @@ jobs:
                   headers={"X-CSRF-Token": csrf_token},
               )
               assert login.status_code == 200, login.text
+              # Login rotates the CSRF token; use the new cookie for subsequent writes.
+              csrf_token = client.cookies.get("rt_csrf")
+              assert csrf_token, "Login did not issue a fresh CSRF cookie"
               organization_id = login.json()["organizations"][0]["organization_id"]
 
               initial = client.get("/api/responses", params={"organization_id": organization_id})
