@@ -833,6 +833,24 @@ def resolve_issue(issue_id: int, user: dict = Depends(current_user)):
     return {"id": item["id"], "status": "resolved"}
 
 
+@app.get("/api/blockchain-events")
+def blockchain_events(organization_id: int | None = None, user: dict = Depends(current_user)):
+    """Return confirmed test/local chain events for organizations the user belongs to."""
+    if organization_id is not None:
+        require_org(user, organization_id)
+        org_ids = [organization_id]
+    else:
+        org_ids = list(user["memberships"])
+    return rows("""SELECT e.id,e.chain_id,e.contract_address,e.transaction_hash,e.log_index,e.block_number,
+        e.response_code,e.event_type,e.actor_address,e.recipient_address,e.amount_raw,e.asset_address,
+        e.asset_decimals,e.purpose,e.evidence_hash,e.confirmation_status,e.observed_at,
+        r.title AS response_title
+        FROM blockchain_events e JOIN responses r ON r.id=e.response_id
+        JOIN organization_memberships m ON m.organization_id=r.organization_id AND m.user_id=%s
+        WHERE r.organization_id=ANY(%s) AND e.confirmation_status='confirmed'
+        ORDER BY e.block_number DESC,e.log_index DESC LIMIT 200""", (user["id"],org_ids))
+
+
 @app.get("/api/audit")
 def audit_history(organization_id: int | None = None, user: dict = Depends(current_user)):
     if organization_id is not None:
