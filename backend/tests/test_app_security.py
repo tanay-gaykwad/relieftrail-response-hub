@@ -1,4 +1,6 @@
+import re
 from contextlib import contextmanager
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
@@ -124,3 +126,14 @@ def test_membership_does_not_reveal_another_organization():
         assert response.status_code == 404
     finally:
         main.app.dependency_overrides.clear()
+
+
+def test_documented_demo_seed_credential_is_usable():
+    seed_file = Path(__file__).resolve().parents[2] / "database" / "seed.sql"
+    seed_sql = seed_file.read_text(encoding="utf-8")
+    match = re.search(
+        r"\('admin@relieftrail\.test','Jamie Davis','([^']+)'",
+        seed_sql,
+    )
+    assert match is not None
+    assert main.password_matches("demo-change-me", match.group(1))

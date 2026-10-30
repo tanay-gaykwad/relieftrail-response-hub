@@ -1,0 +1,155 @@
+name: Blockchain bridge end-to-end
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  local-chain-to-database:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: relieftrail_test
+          POSTGRES_USER: relieftrail
+          POSTGRES_PASSWORD: bridge-test-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U relieftrail -d relieftrail_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://relieftrail:bridge-test-password@localhost:5432/relieftrail_test
+      EVM_RPC_URL: http://127.0.0.1:8545
+      EVM_CHAIN_ID: "31337"
+      EVM_CONFIRMATIONS: "0"
+    steps:
+      - name: Check out ResponseHub
+        uses: actions/checkout@v4
+      - name: Validate local Compose configuration
+        run: docker compose -f docker-compose.yml -f docker-compose.blockchain.yml --profile blockchain config --quiet
+      - name: Check out the companion contract project
+        uses: actions/checkout@v4
+        with:
+          repository: tanay-gaykwad/relieftrail-blockchain
+          ref: main
+          path: relieftrail-blockchain
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+      - name: Install worker dependencies
+        run: python -m pip install -r backend/requirements-dev.txt
+      - name: Initialize disposable database
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/schema.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/seed.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE ROLE relieftrail_app"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/migrations/2026_10_blockchain_event_ledger.sql
+      - name: Set up Node and pnpm
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+      - name: Install and compile contract
+        working-directory: relieftrail-blockchain
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm compile
+      - name: Start local Hardhat RPC
+        run: |
+          cd relieftrail-blockchain
+          pnpm exec hardhat node --hostname 127.0.0.1 > "$RUNNER_TEMP/hardhat.log" 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl --silent --fail -X POST http://127.0.0.1:8545               -H 'content-type: application/json'               -d '{"jsonrpc":"2.0","method":"eth_chainId","params":[],"id":1}' | grep -q '0x7a69'; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/hardhat.log"
+          exit 1
+      - name: Deploy and create sample chain events
+        working-directory: relieftrail-blockchain
+        run: |
+          pnpm deploy:local > "$RUNNER_TEMP/deployment.log"
+          CONTRACT_ADDRESS=$(node -e 'const fs=require("fs");const text=fs.readFileSync(process.argv[1],"utf8");const match=text.match(/\{\s*"chainId"[\s\S]*?\n\}/);if(!match)throw Error("Deployment JSON was not found.");process.stdout.write(JSON.parse(match[0]).contractAddress)' "$RUNNER_TEMP/deployment.log")
+          START_BLOCK=$(node -e 'const fs=require("fs");const text=fs.readFileSync(process.argv[1],"utf8");const match=text.match(/\{\s*"chainId"[\s\S]*?\n\}/);if(!match)throw Error("Deployment JSON was not found.");process.stdout.write(String(JSON.parse(match[0]).startBlock))' "$RUNNER_TEMP/deployment.log")
+          printf 'EVM_CONTRACT_ADDRESS=%s\nEVM_START_BLOCK=%s\n' "$CONTRACT_ADDRESS" "$START_BLOCK" >> "$GITHUB_ENV"
+          export RELIEFTRAIL_CONTRACT_ADDRESS="$CONTRACT_ADDRESS"
+          pnpm demo:events
+      - name: Index chain events once
+        run: python backend/blockchain_sync_worker.py --once
+      - name: Start ResponseHub API
+        run: |
+          cd backend
+          APP_ENV=demo APP_SECRET_KEY=ci-only-secret-for-local-integration uvicorn main:app --host 127.0.0.1 --port 8000 > "$RUNNER_TEMP/api.log" 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl --silent --fail http://127.0.0.1:8000/api/health; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/api.log"
+          exit 1
+      - name: Verify authenticated API can read indexed events
+        run: |
+          python - <<'PY'
+          import httpx
+
+          with httpx.Client(base_url="http://127.0.0.1:8000") as client:
+              csrf_response = client.get("/api/auth/csrf")
+              assert csrf_response.status_code == 200
+              csrf_token = client.cookies.get("rt_csrf")
+              login = client.post(
+                  "/api/auth/login",
+                  json={"email": "admin@relieftrail.test", "password": "demo-change-me"},
+                  headers={"X-CSRF-Token": csrf_token},
+              )
+              assert login.status_code == 200, login.text
+              organization_id = login.json()["organizations"][0]["organization_id"]
+              response = client.get(
+                  "/api/blockchain-events",
+                  params={"organization_id": organization_id},
+              )
+              assert response.status_code == 200, response.text
+              events = response.json()
+              assert len(events) == 3, events
+              assert {event["event_type"] for event in events} == {"donation", "payout"}, events
+              assert all(event["response_code"] == "FLOOD-26-01" for event in events), events
+          PY
+      - name: Verify linked records and idempotent re-run
+        run: |
+          python - <<'PY'
+          import os
+          import psycopg
+          from psycopg.rows import dict_row
+
+          with psycopg.connect(os.environ["DATABASE_URL"], row_factory=dict_row) as conn:
+              rows = conn.execute(
+                  """SELECT response_code,event_type,amount_raw,confirmation_status
+                     FROM blockchain_events ORDER BY block_number,log_index"""
+              ).fetchall()
+              assert len(rows) == 3, rows
+              assert [row["event_type"] for row in rows] == ["donation","donation","payout"], rows
+              assert all(row["response_code"] == "FLOOD-26-01" for row in rows), rows
+              assert all(row["confirmation_status"] == "confirmed" for row in rows), rows
+              assert sum(int(row["amount_raw"]) for row in rows[:2]) == 1_500_000_000_000_000_000
+              assert int(rows[2]["amount_raw"]) == 400_000_000_000_000_000
+          PY
+          python backend/blockchain_sync_worker.py --once
+          python - <<'PY'
+          import os
+          import psycopg
+
+          with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
+              count = conn.execute("SELECT count(*) FROM blockchain_events").fetchone()[0]
+              assert count == 3, f"Expected 3 idempotently indexed events, got {count}"
+          PY

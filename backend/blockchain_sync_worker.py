@@ -1,10 +1,11 @@
 """Local/testnet EVM event indexer for the ReliefTrail ResponseHub demo.
 
-Reads only confirmed events from the configured contract and stores raw token units.
-It does not move funds or treat unmatched events as belonging to any organization.
+Reads events from the configured contract and stores exact raw token units.
+It never moves funds or attributes unmatched events to an organization.
 """
 from __future__ import annotations
 
+import argparse
 import logging
 import os
 import time
@@ -43,16 +44,23 @@ def config() -> dict[str, Any]:
     missing = [key for key in required if not os.getenv(key)]
     if missing:
         raise RuntimeError(f"Missing required configuration: {', '.join(missing)}")
+    start_block = int(os.environ["EVM_START_BLOCK"])
+    confirmations = int(os.getenv("EVM_CONFIRMATIONS", "0"))
+    expected_chain_id = int(os.getenv("EVM_CHAIN_ID", "31337"))
+    if start_block < 0 or confirmations < 0 or expected_chain_id <= 0:
+        raise ValueError("EVM_START_BLOCK and EVM_CONFIRMATIONS must be non-negative; EVM_CHAIN_ID must be positive.")
     address = Web3.to_checksum_address(os.environ["EVM_CONTRACT_ADDRESS"])
     return {
         "rpc": os.environ["EVM_RPC_URL"],
         "address": address,
         "database_url": os.environ["DATABASE_URL"],
-        "start_block": int(os.environ["EVM_START_BLOCK"]),
-        "confirmations": int(os.getenv("EVM_CONFIRMATIONS", "2")),
+        "start_block": start_block,
+        # Zero is appropriate for the local Hardhat demo, which has no reorgs.
+        # Set a positive value when indexing a testnet or other live chain.
+        "confirmations": confirmations,
         "poll_seconds": max(1, int(os.getenv("EVM_POLL_SECONDS", "5"))),
         "batch_size": min(2000, max(1, int(os.getenv("EVM_BATCH_SIZE", "200")))),
-        "expected_chain_id": int(os.getenv("EVM_CHAIN_ID", "31337")),
+        "expected_chain_id": expected_chain_id,
     }
 
 
@@ -84,8 +92,8 @@ def store_batch(conn, chain_id: int, address: str, start: int, end: int, events:
                         asset_address,asset_decimals,purpose,evidence_hash,confirmation_status)
                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,18,%s,%s,%s)
                        ON CONFLICT (chain_id,contract_address,transaction_hash,log_index) DO NOTHING""",
-                    (chain_id,address,event["transactionHash"].hex(),event["logIndex"],event["blockNumber"],
-                     event["blockHash"].hex(),response_id,code,event_type,actor,recipient,
+                    (chain_id,address,Web3.to_hex(event["transactionHash"]),event["logIndex"],event["blockNumber"],
+                     Web3.to_hex(event["blockHash"]),response_id,code,event_type,actor,recipient,
                      str(args["amount"]),ZERO_ADDRESS,purpose,evidence,
                      "confirmed" if response_id is not None else "unmatched"),
                 )
@@ -109,10 +117,7 @@ def scan_once(w3: Web3, contract: Any, conn, settings: dict) -> int:
             "SELECT last_synced_block FROM blockchain_sync_state WHERE chain_id=%s AND contract_address=%s",
             (chain_id,address),
         ).fetchone()
-    if row:
-        start = row["last_synced_block"] + 1
-    else:
-        start = settings["start_block"]
+    start = row["last_synced_block"] + 1 if row else settings["start_block"]
     safe_head = w3.eth.block_number - settings["confirmations"]
     if safe_head < start:
         return 0
@@ -131,14 +136,24 @@ def scan_once(w3: Web3, contract: Any, conn, settings: dict) -> int:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Index events from the configured ReliefTrail contract.")
+    parser.add_argument("--once", action="store_true", help="scan one confirmed block batch and exit (useful for local verification)")
+    args = parser.parse_args()
+
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     settings = config()
     w3 = Web3(Web3.HTTPProvider(settings["rpc"], request_kwargs={"timeout": 20}))
     if not w3.is_connected():
         raise RuntimeError("Could not connect to the configured EVM RPC endpoint.")
+    if w3.eth.chain_id != settings["expected_chain_id"]:
+        raise RuntimeError(f"Connected chain {w3.eth.chain_id}, expected {settings['expected_chain_id']}")
     contract = w3.eth.contract(address=settings["address"], abi=ABI)
     logging.info("Indexer connected to chain %s and contract %s", w3.eth.chain_id, settings["address"])
     with psycopg.connect(settings["database_url"], row_factory=dict_row) as conn:
+        if args.once:
+            count = scan_once(w3, contract, conn, settings)
+            logging.info("One-shot scan complete; indexed %s events.", count)
+            return
         while True:
             try:
                 scan_once(w3, contract, conn, settings)
