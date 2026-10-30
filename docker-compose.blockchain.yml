@@ -1,0 +1,32 @@
+services:
+  bridge-migrate:
+    image: postgres:16-alpine
+    profiles: ["blockchain"]
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local_demo_only}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-local_demo_only}
+    volumes:
+      - ./database/migrations/2026_10_blockchain_event_ledger.sql:/migration.sql:ro
+    entrypoint: ["/bin/sh", "-ec"]
+    command: |
+      until pg_isready -h db -U relieftrail -d relieftrail; do sleep 1; done
+      psql -h db -U relieftrail -d relieftrail -v ON_ERROR_STOP=1 -f /migration.sql
+    depends_on:
+      db:
+        condition: service_healthy
+  blockchain-worker:
+    build: ./backend
+    profiles: ["blockchain"]
+    command: ["python", "blockchain_sync_worker.py"]
+    environment:
+      DATABASE_URL: postgresql://relieftrail_app:${APP_DB_PASSWORD:-local-app-only-change-before-deployment}@db:5432/relieftrail
+      EVM_RPC_URL: ${EVM_RPC_URL:-http://host.docker.internal:8545}
+      EVM_CONTRACT_ADDRESS: ${EVM_CONTRACT_ADDRESS:-}
+      EVM_CHAIN_ID: ${EVM_CHAIN_ID:-31337}
+      EVM_START_BLOCK: ${EVM_START_BLOCK:-0}
+      EVM_CONFIRMATIONS: ${EVM_CONFIRMATIONS:-2}
+      EVM_POLL_SECONDS: ${EVM_POLL_SECONDS:-5}
+      EVM_BATCH_SIZE: ${EVM_BATCH_SIZE:-200}
+    depends_on:
+      bridge-migrate:
+        condition: service_completed_successfully
