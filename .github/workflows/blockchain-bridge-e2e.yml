@@ -30,6 +30,8 @@ jobs:
     steps:
       - name: Check out ResponseHub
         uses: actions/checkout@v4
+      - name: Validate local Compose configuration
+        run: docker compose -f docker-compose.yml -f docker-compose.blockchain.yml --profile blockchain config --quiet
       - name: Check out the companion contract project
         uses: actions/checkout@v4
         with:
