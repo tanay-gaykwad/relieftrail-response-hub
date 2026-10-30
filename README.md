@@ -2,7 +2,7 @@
 
 ReliefTrail ResponseHub is an end-to-end portfolio demo for a fictional nonprofit response and finance team. It connects emergency response records with restricted awards, budget lines, reported disbursements, donor reporting deadlines, review tasks, and an activity history.
 
-This is a separate follow-on project to [ReliefTrail's earlier contract prototype](https://github.com/tanay-gaykwad/relieftrail-blockchain). The earlier repository explores smart-contract event ideas; this application explores the database and workflow around those events. The contract is not currently connected, and the app does not accept donations, move money, or prove aid delivery.
+This is a separate follow-on project to [ReliefTrail's earlier contract prototype](https://github.com/tanay-gaykwad/relieftrail-blockchain). The earlier repository explores smart-contract event ideas; this application explores the database and workflow around those events. The local/test-chain bridge can index donations and payouts into a separate chain-event ledger when the opt-in Compose overlay is configured. The app still does not accept payments or move money, and chain events do not prove aid delivery.
 
 > **Demo safety:** All seeded people, organizations, response records, references, and amounts are fictional. Use only the sample credentials and do not enter real donor, beneficiary, bank, or payment information. This learning project is not production-certified and must not be used for operational humanitarian data.
 
@@ -17,6 +17,7 @@ This is a separate follow-on project to [ReliefTrail's earlier contract prototyp
 - Let users update their display name and change their password from account settings. Password changes require the current password, require 15 characters, and revoke other active sessions.
 - Import a CSV after full-file validation; contributions may be imported directly, while disbursements must identify an active award and allocation category for an approved response. The API checks the award dates and budget before the transaction commits. Duplicate rows are skipped and the file is processed in memory only.
 - Search and export the fictional funding records.
+- In the opt-in local Hardhat integration, view confirmed chain events separately from staff-reported funding records. Chain amounts remain in exact raw units in the database; the UI formats the local demo's native ETH amounts.
 - Resolve a reconciliation flag and see who performed the action in the activity history.
 
 The API uses Argon2id password hashes, server-side revocable sessions in HttpOnly cookies, CSRF checks for write requests, login throttling, exact CORS origins, and security headers. Sessions expire after eight hours. Each request re-reads active account and organization membership from the database. Users have one of four roles: `org_admin`, `editor`, `reviewer`, or `viewer`. Response and award edits require an editor or administrator; only admins can approve or close a response; report review and reconciliation resolution require a reviewer or administrator. PostgreSQL triggers keep audit events append-only and reject award-budget overspend. Demo-account setup is idempotent, so an API restart will not reset changed passwords or roles.
@@ -111,6 +112,29 @@ Requirements: Docker Desktop with Compose, Node.js 22+, and pnpm.
 | Viewer | `viewer@relieftrail.test` | `viewer-demo` |
 
 PostgreSQL runs in a named Docker volume and binds to loopback only. The database bootstrap account owns the schema; the API connects as a separate non-superuser role with only the table and sequence permissions it needs. SQL files under `database/` are applied on the first database start. If you change the initial schema and want to rebuild this disposable demo from scratch, run `docker compose down -v` (this removes the local database contents), then `docker compose up --build`.
+
+## Local blockchain integration demo
+
+This opt-in walkthrough uses only the local Hardhat node and fictional response codes. It does not connect to a public network or real funds.
+
+1. In the `relieftrail-blockchain` clone, start its local node with `docker compose up -d`.
+2. In that repository, run `pnpm install --frozen-lockfile` and `pnpm deploy:local -- --network localhost` only if your package script does not already pass the network. Record the printed contract address and deployment block. (The script selects `localhost` itself.)
+3. In PowerShell, from this ResponseHub folder, set the address and block printed by deployment:
+
+   ```powershell
+   $env:EVM_CONTRACT_ADDRESS = "0x..."
+   $env:EVM_START_BLOCK = "1"
+   ```
+
+4. Start the app and event indexer with the blockchain overlay:
+
+   ```powershell
+   docker compose -f docker-compose.yml -f docker-compose.blockchain.yml --profile blockchain up --build
+   ```
+
+5. Call `donate("FLOOD-26-01")` from a local Hardhat account, or call `payRelief` from the local organizer using that response code. Open **Blockchain activity** in ResponseHub after the configured confirmation depth.
+
+The indexer reads only the configured chain and contract, checks the chain ID, uses a transactionally advanced cursor, and deduplicates logs by chain, contract, transaction, and log index. Unmatched response codes stay in the separate event ledger and are not assigned to a fabricated response. The initial start block is explicit so the worker never silently guesses a recent history window. This demo does not provide deep-reorg recovery, public explorer links, or production operations; it is not an accounting source for real funds.
 
 ## Database design
 
